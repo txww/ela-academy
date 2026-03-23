@@ -1,0 +1,38 @@
+@import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root{
+  --gold:#C6A85B;
+  --lux-black:#0F0F0F;
+  --soft-white:#F8F6F1;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+  color: var(--lux-black); /* أضف هذا */
+}
+
+:root{
+  --gold:#C6A85B;
+  --lux-black:#0F0F0F;
+  --soft-white:#F8F6F1;
+  --text-gray:#6B6B6B;
+}
