@@ -1,224 +1,190 @@
 "use client";
-
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 const STRAPI_URL = process.env.NEXT_PUBLIC_STRAPI_URL || "http://localhost:1337";
-const ADMIN_EMAIL = "admin@hisni.com";
+const ADMIN_EMAIL = "admin@ela.com";
 
 const navLinks = [
   { href: "/", label: "الرئيسية" },
   { href: "/features", label: "المميزات" },
-  { href: "/study-plan", label: "الخطة الدراسة" },
-  { href: "/regulations", label: "لائحة المعهد الإدارية" },
-  { href: "/staff", label: "الكادر التدريسي" },
+  { href: "/study-plan", label: "الخطة الدراسية" },
+  { href: "/regulations", label: "اللوائح" },
+  { href: "/staff", label: "المدرسون" },
 ];
-
-interface User {
-  id?: number;
-  firstName?: string;
-  lastName?: string;
-  email?: string;
-  isTeacher?: boolean;
-}
 
 export default function Navbar() {
   const pathname = usePathname();
   const router = useRouter();
-  const [open, setOpen] = useState(false);
-  const [user, setUser] = useState<User | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [user, setUser] = useState<{ email?: string; firstName?: string; isTeacher?: boolean } | null>(null);
   const [dropdownOpen, setDropdownOpen] = useState(false);
-
-  useEffect(() => setOpen(false), [pathname]);
 
   useEffect(() => {
     const jwt = localStorage.getItem("jwt");
-    if (!jwt) { setUser(null); return; }
-
-    // جلب بيانات المستخدم الحالية من Strapi
-    fetch(`${STRAPI_URL}/api/users/me`, {
-      headers: { Authorization: `Bearer ${jwt}` },
-    })
-      .then(r => r.ok ? r.json() : null)
-      .then(data => {
-        if (data && !data.error) {
-          setUser(data);
-          localStorage.setItem("user", JSON.stringify(data));
-        } else {
-          localStorage.removeItem("jwt");
-          localStorage.removeItem("user");
-          setUser(null);
-        }
+    if (jwt) {
+      fetch(`${STRAPI_URL}/api/users/me`, {
+        headers: { Authorization: `Bearer ${jwt}` },
       })
-      .catch(() => {
-        const stored = localStorage.getItem("user");
-        if (stored) setUser(JSON.parse(stored));
-      });
+        .then((r) => r.json())
+        .then((data) => {
+          if (data?.id) setUser(data);
+        })
+        .catch(() => {});
+    }
   }, [pathname]);
 
   const handleLogout = () => {
-localStorage.removeItem("jwt");
-localStorage.removeItem("user");
-document.cookie = "jwt=; path=/; max-age=0";
+    localStorage.removeItem("jwt");
+    localStorage.removeItem("user");
+    document.cookie = "jwt=; path=/; max-age=0";
     setUser(null);
     setDropdownOpen(false);
     router.push("/");
   };
 
-  const isAdmin = user?.email === ADMIN_EMAIL;
-  const isTeacher = user?.isTeacher === true;
+  const getDashboardLink = () => {
+    if (!user) return "/login";
+    if (user.email === ADMIN_EMAIL) return "/ela-control-panel/students";
+    if (user.isTeacher) return "/teacher";
+    return "/dashboard";
+  };
 
-  // رابط اللوحة حسب نوع المستخدم
-  const panelLink = isAdmin
-    ? "/hisni-control-panel/students"
-    : isTeacher
-    ? "/teacher"
-    : "/dashboard";
-
-  const panelLabel = isAdmin
-    ? "لوحة الإدارة"
-    : isTeacher
-    ? "بوابة المدرسين"
-    : "لوحة الطالب";
-
-  const displayName = user
-    ? `${user.firstName || ""} ${user.lastName || ""}`.trim() || user.email || "حسابي"
-    : null;
+  const getDashboardLabel = () => {
+    if (!user) return "";
+    if (user.email === ADMIN_EMAIL) return "🏛️ لوحة الإدارة";
+    if (user.isTeacher) return "👨‍🏫 بوابة المدرسين";
+    return "🎓 لوحتي";
+  };
 
   return (
-    <header className="sticky top-0 z-50">
-      <div className="bg-black/70 backdrop-blur-md border-b border-[var(--gold)]/20">
-        <div className="mx-auto max-w-6xl px-6">
-          <div className="flex h-16 items-center justify-between">
+    <nav className="fixed top-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-md shadow-sm border-b border-gray-100">
+      <div className="mx-auto max-w-7xl px-6 flex items-center justify-between h-16">
+        {/* Logo */}
+        <Link href="/" className="flex items-center gap-3">
+          <Image src="/logo.png" alt="E.L.A" width={40} height={40} className="object-contain" />
+          <span className="text-xl font-extrabold text-[var(--primary)]">E.L.A</span>
+        </Link>
 
-            {/* يمين: الشعار */}
-            <Link href="/" className="flex items-center gap-3">
-              <Image
-                src="/logo-transparent1.png"
-                alt="شعار المعهد"
-                width={64}
-                height={64}
-                priority
-                className="drop-shadow-[0_2px_14px_rgba(198,168,91,0.35)]"
-              />
-              <div className="leading-tight">
-                <div className="text-sm font-semibold text-[var(--gold)]">معهد الإمام الحصني</div>
-                <div className="text-[11px] text-white/65">للتفقه الشافعي</div>
-              </div>
+        {/* Desktop Nav */}
+        <div className="hidden md:flex items-center gap-1">
+          {navLinks.map((link) => (
+            <Link
+              key={link.href}
+              href={link.href}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                pathname === link.href
+                  ? "bg-[var(--primary)] text-white"
+                  : "text-[var(--text-gray)] hover:text-[var(--primary)] hover:bg-blue-50"
+              }`}
+            >
+              {link.label}
             </Link>
+          ))}
+        </div>
 
-            {/* وسط: روابط */}
-            <nav className="hidden lg:flex items-center gap-7 text-sm font-bold tracking-wide">
-              {navLinks.map((l) => {
-                const active = pathname === l.href;
-                return (
-                  <Link key={l.href} href={l.href}
-                    className={["relative py-2 transition", active ? "text-[var(--gold)]" : "text-white/85 hover:text-white"].join(" ")}>
-                    {l.label}
-                    <span className={["absolute left-0 right-0 -bottom-[10px] mx-auto h-[2px] w-8 rounded-full transition", active ? "bg-[var(--gold)]" : "bg-transparent"].join(" ")} />
+        {/* Auth Buttons */}
+        <div className="hidden md:flex items-center gap-3">
+          {user ? (
+            <div className="relative">
+              <button
+                onClick={() => setDropdownOpen(!dropdownOpen)}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-50 text-[var(--primary)] font-medium text-sm hover:bg-blue-100 transition"
+              >
+                <span className="w-7 h-7 rounded-full bg-[var(--primary)] text-white flex items-center justify-center text-xs font-bold">
+                  {(user.firstName || user.email || "U")[0].toUpperCase()}
+                </span>
+                {user.firstName || user.email?.split("@")[0]}
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+
+              {dropdownOpen && (
+                <div className="absolute left-0 mt-2 w-48 bg-white rounded-xl shadow-lg border border-gray-100 py-2 z-50">
+                  <Link
+                    href={getDashboardLink()}
+                    className="block px-4 py-2 text-sm text-[var(--text-dark)] hover:bg-blue-50 transition"
+                    onClick={() => setDropdownOpen(false)}
+                  >
+                    {getDashboardLabel()}
                   </Link>
-                );
-              })}
-            </nav>
-
-            {/* يسار: أزرار */}
-            <div className="hidden lg:flex items-center gap-3">
-              {user ? (
-                <div className="relative">
-                  <button onClick={() => setDropdownOpen((v) => !v)}
-                    className="flex items-center gap-2 rounded-full border border-[var(--gold)]/40 bg-white/5 px-4 py-2 text-xs font-semibold text-[var(--gold)] hover:bg-white/10 transition">
-                    <div className="w-6 h-6 rounded-full bg-[var(--gold)] flex items-center justify-center text-black font-bold text-xs">
-                      {(displayName || "").charAt(0).toUpperCase()}
-                    </div>
-                    {displayName}
-                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
+                  <button
+                    onClick={handleLogout}
+                    className="w-full text-right px-4 py-2 text-sm text-red-500 hover:bg-red-50 transition"
+                  >
+                    تسجيل الخروج
                   </button>
-
-                  {dropdownOpen && (
-                    <div className="absolute left-0 mt-2 w-48 bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden z-50">
-                      <Link href={panelLink} onClick={() => setDropdownOpen(false)}
-                        className="flex items-center gap-2 px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 text-right">
-                        {isAdmin ? "🏛️" : isTeacher ? "👨‍🏫" : "🎓"}
-                        <span>{panelLabel}</span>
-                      </Link>
-                      <button onClick={handleLogout}
-                        className="w-full flex items-center gap-2 px-4 py-3 text-sm text-red-500 hover:bg-red-50 text-right border-t border-gray-100">
-                        🚪 <span>تسجيل الخروج</span>
-                      </button>
-                    </div>
-                  )}
                 </div>
-              ) : (
-                <>
-                  <Link href="/login"
-                    className="rounded-full border border-white/15 bg-white/5 px-5 py-2 text-xs font-semibold text-white/85 hover:bg-white/10">
-                    دخول
-                  </Link>
-                  <Link href="/register"
-                    className="rounded-full bg-[var(--gold)] px-6 py-2 text-xs font-semibold text-black hover:opacity-90">
-                    تسجيل
-                  </Link>
-                </>
               )}
             </div>
-
-            {/* زر الموبايل */}
-            <button type="button" onClick={() => setOpen((v) => !v)}
-              className="lg:hidden inline-flex items-center justify-center rounded-full border border-white/15 bg-white/5 px-4 py-2 text-xs font-semibold text-white/90 hover:bg-white/10"
-              aria-label="فتح القائمة" aria-expanded={open}>
-              {open ? "إغلاق" : "القائمة"}
-            </button>
-          </div>
+          ) : (
+            <>
+              <Link href="/login" className="px-4 py-2 text-sm font-medium text-[var(--primary)] hover:bg-blue-50 rounded-lg transition">
+                دخول
+              </Link>
+              <Link href="/register" className="px-5 py-2 text-sm font-bold bg-[var(--primary)] text-white rounded-lg hover:bg-[var(--primary-dark)] transition shadow-sm">
+                سجّل الآن
+              </Link>
+            </>
+          )}
         </div>
+
+        {/* Mobile Menu Button */}
+        <button onClick={() => setMenuOpen(!menuOpen)} className="md:hidden p-2">
+          <svg className="w-6 h-6 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+              d={menuOpen ? "M6 18L18 6M6 6l12 12" : "M4 6h16M4 12h16M4 18h16"} />
+          </svg>
+        </button>
       </div>
 
-      {/* قائمة الموبايل */}
-      {open && (
-        <div className="lg:hidden border-b border-[var(--gold)]/15 bg-black/85 backdrop-blur-md">
-          <div className="mx-auto max-w-6xl px-6 py-4">
-            <nav className="grid gap-2">
-              {navLinks.map((l) => {
-                const active = pathname === l.href;
-                return (
-                  <Link key={l.href} href={l.href}
-                    className={["rounded-xl px-4 py-3 text-sm transition", active ? "bg-white/10 text-[var(--gold)]" : "text-white/85 hover:bg-white/10 hover:text-white"].join(" ")}>
-                    {l.label}
-                  </Link>
-                );
-              })}
-            </nav>
-            <div className="mt-4 grid grid-cols-2 gap-3">
-              {user ? (
-                <>
-                  <Link href={panelLink}
-                    className="rounded-xl border border-[var(--gold)]/40 bg-white/5 px-4 py-3 text-center text-sm font-semibold text-[var(--gold)]">
-                    {panelLabel}
-                  </Link>
-                  <button onClick={handleLogout}
-                    className="rounded-xl border border-red-400/40 bg-white/5 px-4 py-3 text-center text-sm font-semibold text-red-400">
-                    خروج
-                  </button>
-                </>
-              ) : (
-                <>
-                  <Link href="/login"
-                    className="rounded-xl border border-white/15 bg-white/5 px-4 py-3 text-center text-sm font-semibold text-white/90 hover:bg-white/10">
-                    دخول
-                  </Link>
-                  <Link href="/register"
-                    className="rounded-xl bg-[var(--gold)] px-4 py-3 text-center text-sm font-semibold text-black hover:opacity-90">
-                    تسجيل
-                  </Link>
-                </>
-              )}
-            </div>
+      {/* Mobile Menu */}
+      {menuOpen && (
+        <div className="md:hidden bg-white border-t border-gray-100 px-6 py-4 space-y-2">
+          {navLinks.map((link) => (
+            <Link
+              key={link.href}
+              href={link.href}
+              onClick={() => setMenuOpen(false)}
+              className={`block px-4 py-3 rounded-lg text-sm font-medium transition ${
+                pathname === link.href
+                  ? "bg-[var(--primary)] text-white"
+                  : "text-[var(--text-gray)] hover:bg-blue-50"
+              }`}
+            >
+              {link.label}
+            </Link>
+          ))}
+          <div className="pt-3 border-t border-gray-100 space-y-2">
+            {user ? (
+              <>
+                <Link href={getDashboardLink()} onClick={() => setMenuOpen(false)}
+                  className="block px-4 py-3 rounded-lg text-sm font-medium text-[var(--primary)] bg-blue-50">
+                  {getDashboardLabel()}
+                </Link>
+                <button onClick={() => { handleLogout(); setMenuOpen(false); }}
+                  className="w-full text-right px-4 py-3 rounded-lg text-sm font-medium text-red-500 hover:bg-red-50">
+                  تسجيل الخروج
+                </button>
+              </>
+            ) : (
+              <>
+                <Link href="/login" onClick={() => setMenuOpen(false)}
+                  className="block px-4 py-3 rounded-lg text-sm font-medium text-[var(--primary)] hover:bg-blue-50">
+                  دخول
+                </Link>
+                <Link href="/register" onClick={() => setMenuOpen(false)}
+                  className="block px-4 py-3 rounded-lg text-sm font-bold bg-[var(--primary)] text-white text-center">
+                  سجّل الآن
+                </Link>
+              </>
+            )}
           </div>
         </div>
       )}
-    </header>
+    </nav>
   );
 }

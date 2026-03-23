@@ -3,10 +3,16 @@
 @tailwind components;
 @tailwind utilities;
 
-:root{
-  --gold:#C6A85B;
-  --lux-black:#0F0F0F;
-  --soft-white:#F8F6F1;
+:root {
+  --primary: #1B2A6B;
+  --primary-light: #2E86C1;
+  --primary-dark: #0F1A4A;
+  --accent: #4A6CF7;
+  --soft-white: #F4F7FC;
+  --text-dark: #1A1A2E;
+  --text-gray: #6B7280;
+  --gold: #1B2A6B;
+  --lux-black: #0F1A4A;
 }
 
 @theme inline {
@@ -24,15 +30,27 @@
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
-  color: var(--lux-black); /* أضف هذا */
+  background: var(--soft-white);
+  color: var(--text-dark);
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 }
 
-:root{
-  --gold:#C6A85B;
-  --lux-black:#0F0F0F;
-  --soft-white:#F8F6F1;
-  --text-gray:#6B6B6B;
+/* Smooth scrolling */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-track {
+  background: var(--soft-white);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--primary-light);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--primary);
 }

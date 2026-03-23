@@ -1,116 +1,63 @@
 "use client";
-
-import { useState, useEffect, Suspense } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
-import Link from "next/link";
+import { useState, useEffect } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
+import Image from "next/image";
 
 const STRAPI_URL = process.env.NEXT_PUBLIC_STRAPI_URL || "http://localhost:1337";
 
-function ResetPasswordForm() {
-  const router = useRouter();
+export default function ResetPasswordPage() {
   const searchParams = useSearchParams();
-  const code = searchParams.get("code");
-
-  const [form, setForm] = useState({ password: "", confirmPassword: "" });
+  const router = useRouter();
+  const code = searchParams.get("code") || "";
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
   const [loading, setLoading] = useState(false);
-  const [done, setDone] = useState(false);
   const [error, setError] = useState("");
-
-  useEffect(() => {
-    if (!code) setError("رابط غير صالح أو منتهي الصلاحية");
-  }, [code]);
+  const [success, setSuccess] = useState(false);
 
   const handleSubmit = async () => {
-    if (!form.password) { setError("كلمة المرور مطلوبة"); return; }
-    if (form.password.length < 6) { setError("كلمة المرور يجب أن تكون 6 أحرف على الأقل"); return; }
-    if (form.password !== form.confirmPassword) { setError("كلمتا المرور غير متطابقتين"); return; }
-    if (!code) { setError("رابط غير صالح"); return; }
-
-    setError("");
-    setLoading(true);
-
+    if (!password || password.length < 6) { setError("كلمة المرور يجب أن تكون 6 أحرف على الأقل"); return; }
+    if (password !== confirm) { setError("كلمتا المرور غير متطابقتين"); return; }
+    setLoading(true); setError("");
     try {
       const res = await fetch(`${STRAPI_URL}/api/auth/reset-password`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code, password: form.password, passwordConfirmation: form.confirmPassword }),
+        body: JSON.stringify({ code, password, passwordConfirmation: confirm }),
       });
-
-      if (res.ok) {
-        setDone(true);
-        setTimeout(() => router.push("/login"), 3000);
-      } else {
-        setError("حدث خطأ، الرابط منتهي الصلاحية أو غير صالح");
-      }
-    } catch {
-      setError("تعذّر الاتصال بالخادم");
-    } finally {
-      setLoading(false);
-    }
+      if (res.ok) { setSuccess(true); setTimeout(() => router.push("/login"), 3000); }
+      else { setError("الرابط منتهي أو غير صالح"); }
+    } catch { setError("تعذّر الاتصال بالخادم"); }
+    finally { setLoading(false); }
   };
 
   return (
-    <main className="min-h-screen bg-[var(--soft-white)] flex items-center justify-center px-4 py-16">
-      <div className="bg-white rounded-2xl shadow-sm p-8 w-full max-w-md">
-
-        <div className="text-center mb-8">
-          <div className="w-16 h-16 rounded-full border-4 border-[var(--gold)] flex items-center justify-center mx-auto mb-4">
-            <span className="text-[var(--gold)] text-2xl">🔐</span>
-          </div>
-          <h1 className="text-2xl font-bold text-[var(--lux-black)] mb-1">إعادة تعيين كلمة المرور</h1>
-          <p className="text-[var(--text-gray)] text-sm">أدخل كلمة المرور الجديدة</p>
-        </div>
-
-        {done ? (
-          <div className="text-center">
+    <main className="min-h-screen bg-gradient-to-br from-[var(--primary-dark)] via-[var(--primary)] to-[var(--primary-light)] flex items-center justify-center px-4">
+      <div className="bg-white rounded-2xl shadow-2xl p-10 w-full max-w-sm text-center">
+        <Image src="/logo.png" alt="E.L.A" width={70} height={70} className="mx-auto mb-4 object-contain" />
+        <h2 className="text-xl font-bold text-[var(--primary)] mb-4">إعادة تعيين كلمة المرور</h2>
+        {success ? (
+          <div>
             <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-4">
-              <span className="text-3xl">✅</span>
+              <span className="text-green-500 text-3xl">✓</span>
             </div>
-            <h2 className="text-lg font-bold text-[var(--lux-black)] mb-2">تم التغيير بنجاح!</h2>
-            <p className="text-[var(--text-gray)] text-sm mb-6">سيتم توجيهك لصفحة الدخول تلقائياً...</p>
-            <Link href="/login" className="block w-full bg-[var(--gold)] text-white py-3 rounded-lg font-semibold hover:opacity-90 transition text-center">
-              تسجيل الدخول الآن
-            </Link>
+            <p className="text-[var(--text-gray)] text-sm">تم تغيير كلمة المرور بنجاح! جاري التحويل...</p>
           </div>
         ) : (
-          <>
-            {error && <div className="mb-5 p-4 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm text-right">{error}</div>}
-
-            <div className="flex flex-col gap-4">
-              <div>
-                <label className="block text-sm font-medium text-[var(--lux-black)] mb-1">كلمة المرور الجديدة</label>
-                <input type="password" value={form.password} onChange={(e) => setForm(p => ({ ...p, password: e.target.value }))}
-                  className="w-full border border-gray-200 rounded-lg px-4 py-3 text-right text-black bg-white focus:outline-none focus:border-[var(--gold)] transition"
-                  placeholder="6 أحرف على الأقل" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-[var(--lux-black)] mb-1">تأكيد كلمة المرور</label>
-                <input type="password" value={form.confirmPassword} onChange={(e) => setForm(p => ({ ...p, confirmPassword: e.target.value }))}
-                  onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
-                  className="w-full border border-gray-200 rounded-lg px-4 py-3 text-right text-black bg-white focus:outline-none focus:border-[var(--gold)] transition"
-                  placeholder="أعد إدخال كلمة المرور" />
-              </div>
-
-              <button onClick={handleSubmit} disabled={loading || !code}
-                className="w-full bg-[var(--gold)] text-white py-3 rounded-lg font-semibold hover:opacity-90 transition disabled:opacity-60">
-                {loading ? "جاري الحفظ..." : "حفظ كلمة المرور الجديدة"}
-              </button>
-
-              <Link href="/login" className="text-center text-sm text-[var(--text-gray)] hover:text-[var(--gold)] transition">
-                ← العودة لتسجيل الدخول
-              </Link>
-            </div>
-          </>
+          <div className="space-y-4">
+            {error && <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">{error}</div>}
+            <input type="password" placeholder="كلمة المرور الجديدة" value={password} onChange={(e) => setPassword(e.target.value)}
+              className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm text-black bg-gray-50 focus:outline-none focus:border-[var(--primary-light)] transition" />
+            <input type="password" placeholder="تأكيد كلمة المرور" value={confirm} onChange={(e) => setConfirm(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
+              className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm text-black bg-gray-50 focus:outline-none focus:border-[var(--primary-light)] transition" />
+            <button onClick={handleSubmit} disabled={loading}
+              className="w-full bg-[var(--primary)] text-white py-3 rounded-xl font-bold hover:bg-[var(--primary-dark)] transition disabled:opacity-60">
+              {loading ? "جاري التغيير..." : "تغيير كلمة المرور"}
+            </button>
+          </div>
         )}
       </div>
     </main>
-  );
-}
-
-export default function ResetPasswordPage() {
-  return (
-    <Suspense fallback={<main className="min-h-screen bg-[var(--soft-white)] flex items-center justify-center"><div className="text-[var(--gold)]">جاري التحميل...</div></main>}>
-      <ResetPasswordForm />
-    </Suspense>
   );
 }

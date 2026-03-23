@@ -4,7 +4,7 @@ export function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const token = req.cookies.get("jwt")?.value;
 
-  if (pathname.startsWith("/hisni-control-panel") ||
+  if (pathname.startsWith("/ela-control-panel") ||
       pathname.startsWith("/teacher") ||
       pathname.startsWith("/dashboard")) {
     if (!token) return NextResponse.redirect(new URL("/login", req.url));
@@ -15,7 +15,7 @@ export function proxy(req: NextRequest) {
 
 export const config = {
   matcher: [
-    "/hisni-control-panel/:path*",
+    "/ela-control-panel/:path*",
     "/teacher/:path*",
     "/dashboard/:path*",
   ],

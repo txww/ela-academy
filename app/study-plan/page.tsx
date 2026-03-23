@@ -3,238 +3,175 @@ import { useState } from "react";
 
 const studyPlan = [
   {
-    year: "السنة الأولى",
+    level: "المستوى الأول — A1 (مبتدئ)",
+    color: "from-green-400 to-emerald-500",
     semesters: [
       {
         title: "الفصل الأول",
         subjects: [
-          { name: "الفقه", memorization: "", core: "متن  الغاية والتقريب\nتحقيق ماجد الحموي", supplementary: "", enrichment: "" },
-          { name: "أصول الفقه", memorization: "الورقات", core: "الورقات في أصول الفقه\nت: عبدالمحسن القاسم", supplementary: "", enrichment: "" },
-          { name: "القواعد الفقهية", memorization: "", core: "الخلاصة في القواعد الفقهية عند الشافعية\nلعبد الله بن سعيد المخاشن", supplementary: "", enrichment: "" },
-          { name: "النحو", memorization: "", core: "حقيبة المشجرات والتمرينات على الآجرومية ونظمها\nمركز تميز، دار مفكرون بلا حدود", supplementary: "", enrichment: "" },
-          { name: "المذهب", memorization: "", core: "", supplementary: "- التعليق على المدخل إلى مذهب الإمام الشافعي\nدار الخير (إندونيسيا)\n- توالي التأسيس لمعالي محمد بن إدريس\nدار الكتب العلمية", enrichment: "" },
-          { name: "الآداب", memorization: "", core: "", supplementary: "", enrichment: "التربية النبوية\nلمحمد عبدالله الدرويش طبعة دار اليقين" },
-          { name: "متفرقات", memorization: "", core: "", supplementary: "", enrichment: "- صفحات من صبر العلماء\nعبدالفتاح أبو غدة\nدار السلام / دار البشائر" },
+          { name: "أساسيات القواعد", type: "أساسي", desc: "الأزمنة البسيطة، الأسماء، الضمائر، أدوات التعريف" },
+          { name: "المفردات الأساسية", type: "أساسي", desc: "500 كلمة شائعة، التحيات، الأرقام، الألوان، العائلة" },
+          { name: "الاستماع والنطق", type: "أساسي", desc: "أصوات الحروف الإنجليزية، التمييز السمعي، النطق الصحيح" },
+          { name: "المحادثة البسيطة", type: "تطبيقي", desc: "تقديم النفس، السؤال عن الاتجاهات، المحادثات اليومية" },
         ],
       },
       {
         title: "الفصل الثاني",
         subjects: [
-          { name: "الفقه", memorization: "مختصر أبي شجاع (1)\nدار المنهاج", core: "فتح القريب المجيب (2)\nدار المنهاج/ دار ابن حزم", supplementary: "", enrichment: "" },
-          { name: "أصول الفقه", memorization: "", core: "شرح المحلي على الورقات\nدار ابن حزم", supplementary: "", enrichment: "" },
-          { name: "الصرف", memorization: "", core: "الصرف الصغير\nسليمان العيوني، دار طيبة الخضراء", supplementary: "", enrichment: "" },
-          { name: "الإملاء", memorization: "", core: "قواعد الإملاء\nعبدالسلام هارون، دار الطلائع", supplementary: "", enrichment: "" },
-          { name: "المنطق", memorization: "", core: "إيساغوجي\nالمكتبة الهاشمية", supplementary: "ضوابط المعرفة\nدار القلم", enrichment: "" },
-          { name: "البحث والمناظرة", memorization: "", core: "", supplementary: "رسالة الآداب لطاشكبري زادة\nت: حايف النبهان، دار الظاهرية", enrichment: "" },
-          { name: "الآداب", memorization: "", core: "", supplementary: "", enrichment: "حرمة أهل العلم\nمحمد المقدم، دار الإيمان" },
-          { name: "متفرقات", memorization: "", core: "", supplementary: "", enrichment: "- إصلاح الفقيه\nهيثم الرومي، مركز نماء\n- فقه تاريخ الفقه\nهيثم الرومي" },
+          { name: "القواعد المتقدمة A1", type: "أساسي", desc: "المضارع المستمر، الماضي البسيط، حروف الجر" },
+          { name: "القراءة الأولية", type: "أساسي", desc: "قراءة نصوص بسيطة، فهم اللافتات والإعلانات" },
+          { name: "الكتابة الأساسية", type: "تطبيقي", desc: "كتابة جمل بسيطة، ملء استمارات، رسائل قصيرة" },
+          { name: "مشروع تطبيقي", type: "إثرائي", desc: "تقديم عرض شفهي بسيط عن موضوع شخصي" },
         ],
       },
     ],
   },
   {
-    year: "السنة الثانية",
+    level: "المستوى الثاني — A2 (ما قبل المتوسط)",
+    color: "from-teal-400 to-cyan-500",
     semesters: [
       {
         title: "الفصل الأول",
         subjects: [
-          { name: "الفقه", memorization: "مختصر أبي شجاع (2)\nدار المنهاج", core: "عمدة السالك وعدة الناسك (1)\nدار المنهاج", supplementary: "", enrichment: "" },
-          { name: "أصول الفقه", memorization: "", core: "دروس أصول الفقه المكية (1)\nدائرة الأوقاف (دبي)", supplementary: "لطائف الإشارات على تسهيل الطرقات\nدار الفتح/ مركز تفكر", enrichment: "" },
-          { name: "النحو", memorization: "", core: "شرح قطر الندى وبل الصدى (1)\nالمكتبة العصرية/ دار الطلائع", supplementary: "", enrichment: "" },
-          { name: "البلاغة", memorization: "", core: "زبدة البلاغة\nمحمد نصيف، دار طيبة الخضراء", supplementary: "", enrichment: "" },
-          { name: "المذهب", memorization: "", core: "", supplementary: "الفوائد المكية فيما يحتاجه طلبة الشافعية\nت: حميد الحالمي، مركز النور", enrichment: "المدخل إلى المذهب الشافعي\nدار الإمتاء الأردنية" },
-          { name: "متفرقات", memorization: "", core: "", supplementary: "", enrichment: "- الماجريات\nإبراهيم السكران، دار الحضارة\n- المجالس الفقهية\nهيثم الرومي، مركز تكوين" },
+          { name: "القواعد المتوسطة", type: "أساسي", desc: "الأزمنة المركبة، الجمل الشرطية البسيطة، المبني للمجهول" },
+          { name: "توسيع المفردات", type: "أساسي", desc: "1000 كلمة إضافية، التعابير الاصطلاحية الشائعة" },
+          { name: "مهارات الاستماع", type: "أساسي", desc: "فهم المحادثات البطيئة، الأخبار المبسطة" },
+          { name: "المحادثة التفاعلية", type: "تطبيقي", desc: "حوارات في المطعم، التسوق، السفر" },
         ],
       },
       {
         title: "الفصل الثاني",
         subjects: [
-          { name: "الفقه", memorization: "مختصر أبي شجاع (3)\nدار المنهاج", core: "عمدة السالك وعدة الناسك (2)\nدار المنهاج", supplementary: "", enrichment: "" },
-          { name: "أصول الفقه", memorization: "", core: "دروس أصول الفقه المكية (2)\nدائرة الأوقاف (دبي)", supplementary: "المدخل إلى أصول الإمام الشافعي\nمرتضى الداغستاني، دار الفاتح", enrichment: "" },
-          { name: "القواعد الفقهية", memorization: "", core: "الفرائد البهية في الفوائد القواعد الفقهية\nت: أنور أبو زيد، دار الميمنة", supplementary: "إيضاح القواعد الفقهية\nلطلاب المدرسة الصولتية\nت: أحمد الحداد، دار الضياء", enrichment: "" },
-          { name: "النحو", memorization: "", core: "شرح قطر الندى وبل الصدى (2)\nالمكتبة العصرية/ دار الطلائع", supplementary: "", enrichment: "" },
-          { name: "مصطلحات", memorization: "", core: "", supplementary: "", enrichment: "" },
-          { name: "التزكية", memorization: "", core: "", supplementary: "", enrichment: "مطهرة القلوب\nمن قترة العيوب (1)\nمحمد مولود بن أحمد فال" },
-          { name: "متفرقات", memorization: "", core: "", supplementary: "", enrichment: "- مسلكيات\nإبراهيم السكران، دار الحضارة\n- صناعة التفكير الفقهي\nمشاري الشثري، مركز تكوين" },
+          { name: "القراءة المتوسطة", type: "أساسي", desc: "قصص قصيرة مبسطة، مقالات سهلة" },
+          { name: "الكتابة المتوسطة", type: "أساسي", desc: "كتابة فقرات، رسائل إلكترونية، وصف الأحداث" },
+          { name: "النطق والتجويد", type: "تطبيقي", desc: "ربط الكلمات، الإيقاع والنبر في الجمل" },
+          { name: "اختبار تحديد المستوى", type: "إثرائي", desc: "اختبار شامل للانتقال للمستوى B1" },
         ],
       },
     ],
   },
   {
-    year: "السنة الثالثة",
+    level: "المستوى الثالث — B1 (متوسط)",
+    color: "from-blue-400 to-indigo-500",
     semesters: [
       {
         title: "الفصل الأول",
         subjects: [
-          { name: "الفقه", memorization: "العبادات من المنهاج (1)\nدار المنهاج", core: "منهاج الطالبين وعمدة المفتين (1)\nدار المنهاج", supplementary: "الديباج شرح المنهاج (1)\nدار المنهاج", enrichment: "" },
-          { name: "أصول الفقه", memorization: "", core: "دروس أصول الفقه المكية (3)\nدائرة الأوقاف (دبي)", supplementary: "", enrichment: "" },
-          { name: "النحو", memorization: "", core: "شرح قطر الندى وبل الصدى (3)\nالمكتبة العصرية/ دار الطلائع", supplementary: "", enrichment: "" },
-          { name: "تخريج الفروع", memorization: "", core: "", supplementary: "مفتاح الوصول إلى بناء الفروع على الأصول (1)\nت: محمد علي فركوس، مؤسسة الريان", enrichment: "التخريج عند الفقهاء والأصوليين (1)\nيعقوب الباحسين، مكتبة الرشد" },
-          { name: "مصطلحات", memorization: "", core: "", supplementary: "تبصرة المحتاج بما خفي من مصطلح المنهاج\nدار الضياء", enrichment: "" },
-          { name: "التزكية", memorization: "", core: "", supplementary: "", enrichment: "مطهرة القلوب\nمن قترة العيوب (2)\nمحمد مولود بن أحمد فال" },
-          { name: "التراجم", memorization: "", core: "", supplementary: "", enrichment: "العقد المذهب\nفي طبقات حملة المذهب (1)\nدار الكتب العلمية" },
+          { name: "القواعد المتقدمة", type: "أساسي", desc: "الجمل الشرطية المتقدمة، الأفعال المركبة، الروابط" },
+          { name: "مفردات متخصصة", type: "أساسي", desc: "مفردات الأعمال، التكنولوجيا، الصحة" },
+          { name: "الاستماع المتقدم", type: "أساسي", desc: "فهم البودكاست، الأفلام مع ترجمة" },
+          { name: "الكتابة الأكاديمية", type: "تطبيقي", desc: "كتابة مقالات قصيرة، تقارير بسيطة" },
         ],
       },
       {
         title: "الفصل الثاني",
         subjects: [
-          { name: "الفقه", memorization: "العبادات من المنهاج (2)\nدار المنهاج", core: "منهاج الطالبين وعمدة المفتين (2)\nدار المنهاج", supplementary: "الديباج شرح المنهاج (2)\nدار المنهاج", enrichment: "" },
-          { name: "أصول الفقه", memorization: "", core: "لب الأصول في أصول الفقه (1)\nت: آصف جيلاني الجاوي", supplementary: "", enrichment: "" },
-          { name: "الفرائض", memorization: "", core: "شرح الرحبية في علم الفرائض\nسبط الماردينى، دار القلم", supplementary: "", enrichment: "" },
-          { name: "تخريج الفروع", memorization: "", core: "", supplementary: "مفتاح الوصول إلى بناء الفروع على الأصول (2)\nت: محمد علي فركوس، مؤسسة الريان", enrichment: "التخريج عند الفقهاء والأصوليين (2)\nيعقوب الباحسين، مكتبة الرشد" },
-          { name: "مصطلحات", memorization: "", core: "", supplementary: "الفوائد المدنية فيمن يفتي بقوله من أئمة الشافعية\nت: بسام الجابي، دار نور الصباح", enrichment: "" },
-          { name: "التزكية", memorization: "", core: "", supplementary: "", enrichment: "مطهرة القلوب\nمن قترة العيوب (3)\nمحمد مولود بن أحمد فال" },
-          { name: "التراجم", memorization: "", core: "", supplementary: "", enrichment: "العقد المذهب\nفي طبقات حملة المذهب (2)\nدار الكتب العلمية" },
+          { name: "المحادثة المتقدمة", type: "أساسي", desc: "مناقشات، عروض تقديمية، مقابلات عمل" },
+          { name: "القراءة النقدية", type: "أساسي", desc: "تحليل مقالات، قراءة أخبار حقيقية" },
+          { name: "التحضير لـ IELTS/TOEFL", type: "إثرائي", desc: "استراتيجيات الاختبارات الدولية" },
+          { name: "مشروع بحثي", type: "تطبيقي", desc: "بحث وعرض تقديمي عن موضوع متخصص" },
         ],
       },
     ],
   },
   {
-    year: "السنة الرابعة",
+    level: "المستوى الرابع — B2-C1 (متقدم)",
+    color: "from-purple-400 to-violet-500",
     semesters: [
       {
         title: "الفصل الأول",
         subjects: [
-          { name: "الفقه", memorization: "العبادات من المنهاج (3)\nدار المنهاج", core: "منهاج الطالبين وعمدة المفتين (3)\nدار المنهاج", supplementary: "الديباج شرح المنهاج (3)\nدار المنهاج", enrichment: "" },
-          { name: "أصول الفقه", memorization: "", core: "لب الأصول في أصول الفقه (2)\nت: آصف جيلاني الجاوي", supplementary: "", enrichment: "" },
-          { name: "تخريج الفروع", memorization: "", core: "التمهيد في تخريج الفروع على الأصول\nجمال الدين الإسنوي، مؤسسة الرسالة", supplementary: "", enrichment: "" },
-          { name: "متفرقات", memorization: "", core: "", supplementary: "مختارات من المجموع للنووي\nت: محمد المطيعي، مكتبة الإرشاد", enrichment: "- مختارات من تفسير الكيا الهراسي\n- الفكر السامي في تاريخ الفقه الإسلامي (1)\nالمكتبة العلمية (المدينة)" },
+          { name: "إتقان القواعد", type: "أساسي", desc: "تراكيب متقدمة، أساليب بلاغية، دقة لغوية" },
+          { name: "الطلاقة في المحادثة", type: "أساسي", desc: "مناظرات، حل مشكلات، تفاوض" },
+          { name: "الكتابة الاحترافية", type: "أساسي", desc: "كتابة أكاديمية ومهنية متقدمة" },
+          { name: "الأدب الإنجليزي", type: "إثرائي", desc: "قراءة روايات وقصص أدبية مختارة" },
         ],
       },
       {
         title: "الفصل الثاني",
         subjects: [
-          { name: "الفقه", memorization: "العبادات من المنهاج (4)\nدار المنهاج", core: "منهاج الطالبين وعمدة المفتين (4)\nدار المنهاج", supplementary: "الديباج شرح المنهاج (4)\nدار المنهاج", enrichment: "" },
-          { name: "أصول الفقه", memorization: "", core: "جمع الجوامع (1)\nت: عبدالله الداغستاني، دار طيبة الخضراء", supplementary: "", enrichment: "" },
-          { name: "المقاصد", memorization: "", core: "مختصر الفوائد في اختصار المقاصد\nت: إياد خالد الطباع، دار الفكر", supplementary: "", enrichment: "" },
-          { name: "الجدل", memorization: "", core: "", supplementary: "المعونة في الجدل\nت: علي العميريني، جمعية إحياء التراث الإسلامي\n/ ت: عبدالمجيد تركي، دار الغرب الإسلامي", enrichment: "" },
-          { name: "متفرقات", memorization: "", core: "", supplementary: "مختارات من المعاملات من موسوعة الفقه الإسلامي والقضايا المعاصرة\nوهبة الزحيلي، دار الفكر", enrichment: "- معركة النص\nمهد العجلان، آفاق المعرفة\n- الفكر السامي في تاريخ الفقه الإسلامي (2)\nالمكتبة العلمية (المدينة)" },
-        ],
-      },
-    ],
-  },
-  {
-    year: "السنة الخامسة",
-    semesters: [
-      {
-        title: "الفصل الأول",
-        subjects: [
-          { name: "الفقه", memorization: "العبادات من المنهاج (5)\nدار المنهاج", core: "منهاج الطالبين وعمدة المفتين (5)\nدار المنهاج", supplementary: "الديباج شرح المنهاج (5)\nدار المنهاج", enrichment: "" },
-          { name: "أصول الفقه", memorization: "", core: "جمع الجوامع (2)\nت: عبدالله الداغستاني، دار طيبة الخضراء", supplementary: "", enrichment: "" },
-          { name: "أحاديث الأحكام", memorization: "", core: "متع العلام بشرح أحاديث الأحكام (1)\nدار المنع", supplementary: "", enrichment: "" },
-          { name: "التراجم", memorization: "", core: "", supplementary: "عماد الرضا ببيان أدب الجيرة بعدن (1)\nمطبعه صناء الجيرة بعدن (اليمن)", enrichment: "مختارات من\nطبقات الشافعية الكبرى (1)\nت: عبدالفتاح الحلو، محمود الطناحي" },
-          { name: "متفرقات", memorization: "", core: "", supplementary: "- جماع العلام للإمام الشافعي\nت: أحمد محمد شاكر\n- مختارات من تحصين المأخذ عن الغزالي\nدار أسمار (الكويت)", enrichment: "التمذهب دراسة نظرية نقدية (1)\nدار التدمرية" },
-        ],
-      },
-      {
-        title: "الفصل الثاني",
-        subjects: [
-          { name: "الفقه", memorization: "العبادات من المنهاج (6)\nدار المنهاج", core: "منهاج الطالبين وعمدة المفتين (6)\nدار المنهاج", supplementary: "الديباج شرح المنهاج (6)\nدار المنهاج", enrichment: "" },
-          { name: "أصول الفقه", memorization: "", core: "جمع الجوامع (3)\nت: عبدالله الداغستاني، دار طيبة الخضراء", supplementary: "", enrichment: "" },
-          { name: "أحاديث الأحكام", memorization: "", core: "متع العلام بشرح أحاديث الأحكام (2)\nدار المنع", supplementary: "", enrichment: "" },
-          { name: "القضاء", memorization: "", core: "", supplementary: "عماد الرضا ببيان أدب الجيرة بعدن (2)\nمطبعه صناء الجيرة بعدن (اليمن)", enrichment: "" },
-          { name: "التراجم", memorization: "", core: "", supplementary: "", enrichment: "مختارات من\nطبقات الشافعية الكبرى (2)\nت: عبدالفتاح الحلو، محمود الطناحي" },
-          { name: "متفرقات", memorization: "", core: "- التخريج عند الفقهاء والأصوليين\nيعقوب الباحسين، مكتبة الرشد\n- دلالات الألفاظ في مناهج الأصوليين\nالتدمرية", supplementary: "", enrichment: "التمذهب دراسة نظرية نقدية (2)\nدار التدمرية" },
+          { name: "اللغة المهنية", type: "أساسي", desc: "إنجليزي الأعمال، المراسلات الرسمية" },
+          { name: "اختبارات دولية", type: "تطبيقي", desc: "تدريب مكثف على IELTS / TOEFL" },
+          { name: "مشروع التخرج", type: "تطبيقي", desc: "بحث شامل وعرض تقديمي باللغة الإنجليزية" },
+          { name: "شهادة الإتمام", type: "إثرائي", desc: "اختبار نهائي شامل وشهادة معتمدة" },
         ],
       },
     ],
   },
 ];
 
-export default function StudyPlanPage() {
-  const [activeYear, setActiveYear] = useState(0);
+const typeColors: Record<string, string> = {
+  "أساسي": "bg-blue-100 text-blue-700",
+  "تطبيقي": "bg-amber-100 text-amber-700",
+  "إثرائي": "bg-purple-100 text-purple-700",
+};
 
-  const year = studyPlan[activeYear];
+export default function StudyPlanPage() {
+  const [activeLevel, setActiveLevel] = useState(0);
 
   return (
-    <main className="min-h-screen bg-[var(--soft-white)]">
+    <main className="min-h-screen bg-[var(--soft-white)] pt-24 pb-20">
+      <div className="mx-auto max-w-7xl px-6">
+        <div className="text-center mb-12">
+          <div className="inline-block px-4 py-2 bg-[var(--primary)]/10 rounded-full mb-4">
+            <span className="text-[var(--primary)] text-sm font-bold">المنهج الدراسي</span>
+          </div>
+          <h1 className="text-3xl md:text-4xl font-extrabold text-[var(--primary)]">الخطة الدراسية</h1>
+          <div className="mx-auto mt-4 h-1 w-20 rounded-full bg-[var(--primary-light)]" />
+          <p className="mx-auto mt-6 max-w-2xl text-[var(--text-gray)] leading-8">
+            خطة تعليمية متكاملة من المبتدئ إلى المتقدم مبنية على المعايير الأوروبية (CEFR)
+          </p>
+        </div>
 
-      {/* Hero */}
-      <div className="bg-[var(--lux-black)] py-14 px-4 text-center">
-        <h1 className="text-3xl font-bold text-white mb-2">خطة الدراسة</h1>
-        <div className="w-12 h-0.5 bg-[var(--gold)] mx-auto mb-3" />
-        <p className="text-gray-400 text-sm">معهد الإمام تقي الدين الحصني للتفقه الشافعي</p>
-      </div>
-
-      {/* Year Tabs */}
-      <div className="sticky top-0 z-10 bg-white shadow-sm border-b border-gray-100">
-        <div className="max-w-6xl mx-auto px-4 flex overflow-x-auto">
-          {studyPlan.map((y, i) => (
-            <button key={i} onClick={() => setActiveYear(i)}
-              className={`px-5 py-4 text-sm font-medium whitespace-nowrap transition border-b-2 ${
-                activeYear === i
-                  ? "border-[var(--gold)] text-[var(--gold)]"
-                  : "border-transparent text-[var(--text-gray)] hover:text-[var(--lux-black)]"
-              }`}>
-              {y.year}
+        {/* Level Tabs */}
+        <div className="flex flex-wrap gap-3 justify-center mb-10">
+          {studyPlan.map((level, i) => (
+            <button
+              key={i}
+              onClick={() => setActiveLevel(i)}
+              className={`px-5 py-3 rounded-xl text-sm font-bold transition-all ${
+                activeLevel === i
+                  ? "bg-[var(--primary)] text-white shadow-lg"
+                  : "bg-white text-[var(--text-gray)] border border-gray-200 hover:border-[var(--primary-light)]"
+              }`}
+            >
+              {level.level.split("—")[0].trim()}
             </button>
           ))}
         </div>
-      </div>
 
-      {/* Content */}
-      <div className="max-w-6xl mx-auto px-4 py-10">
-        <div className="flex flex-col gap-10">
-          {year.semesters.map((semester, si) => (
-            <div key={si}>
-              {/* Semester Header */}
-              <div className="flex items-center gap-4 mb-5">
-                <div className="w-10 h-10 rounded-full bg-[var(--gold)] flex items-center justify-center text-white font-bold shrink-0">
-                  {si + 1}
+        {/* Active Level Content */}
+        <div>
+          <h2 className={`text-xl font-bold text-[var(--primary)] mb-6 text-center`}>
+            {studyPlan[activeLevel].level}
+          </h2>
+
+          <div className="grid md:grid-cols-2 gap-8">
+            {studyPlan[activeLevel].semesters.map((sem, si) => (
+              <div key={si} className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+                <div className={`bg-gradient-to-l ${studyPlan[activeLevel].color} px-6 py-4`}>
+                  <h3 className="text-lg font-bold text-white">{sem.title}</h3>
                 </div>
-                <h2 className="text-xl font-bold text-[var(--lux-black)]">{semester.title}</h2>
-                <div className="flex-1 h-px bg-[var(--gold)]/20" />
-              </div>
-
-              {/* Cards Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {semester.subjects.map((subject, idx) => (
-                  <div key={idx} className="bg-white rounded-2xl shadow-sm overflow-hidden border border-gray-100">
-                    {/* Card Header */}
-                    <div className="bg-[var(--lux-black)] px-5 py-3 flex items-center justify-between">
-                      <span className="text-white font-bold">{subject.name}</span>
-                      <div className="flex gap-1">
-                        {subject.memorization && <span className="text-xs bg-[var(--gold)] text-black px-2 py-0.5 rounded-full font-medium">حفظ</span>}
-                        {subject.core && <span className="text-xs bg-blue-500 text-white px-2 py-0.5 rounded-full font-medium">أساسي</span>}
-                        {subject.supplementary && <span className="text-xs bg-purple-500 text-white px-2 py-0.5 rounded-full font-medium">تكميلي</span>}
-                        {subject.enrichment && <span className="text-xs bg-green-500 text-white px-2 py-0.5 rounded-full font-medium">إثرائي</span>}
+                <div className="p-6 space-y-4">
+                  {sem.subjects.map((sub, subi) => (
+                    <div key={subi} className="flex gap-4 p-4 rounded-xl bg-gray-50 hover:bg-blue-50/50 transition">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <h4 className="font-bold text-[var(--text-dark)] text-sm">{sub.name}</h4>
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${typeColors[sub.type] || "bg-gray-100 text-gray-600"}`}>
+                            {sub.type}
+                          </span>
+                        </div>
+                        <p className="text-[var(--text-gray)] text-xs leading-6">{sub.desc}</p>
                       </div>
                     </div>
-                    {/* Card Body */}
-                    <div className="p-4 flex flex-col gap-3">
-                      {subject.memorization && (
-                        <div className="flex gap-3">
-                          <span className="text-xs font-bold text-[var(--gold)] bg-[var(--gold)]/10 px-2 py-1 rounded-lg h-fit whitespace-nowrap">حفظ</span>
-                          <p className="text-sm text-[var(--lux-black)] leading-relaxed whitespace-pre-line">{subject.memorization}</p>
-                        </div>
-                      )}
-                      {subject.core && (
-                        <div className="flex gap-3">
-                          <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-lg h-fit whitespace-nowrap">أساسي</span>
-                          <p className="text-sm text-[var(--lux-black)] leading-relaxed whitespace-pre-line">{subject.core}</p>
-                        </div>
-                      )}
-                      {subject.supplementary && (
-                        <div className="flex gap-3">
-                          <span className="text-xs font-bold text-purple-600 bg-purple-50 px-2 py-1 rounded-lg h-fit whitespace-nowrap">تكميلي</span>
-                          <p className="text-sm text-[var(--lux-black)] leading-relaxed whitespace-pre-line">{subject.supplementary}</p>
-                        </div>
-                      )}
-                      {subject.enrichment && (
-                        <div className="flex gap-3">
-                          <span className="text-xs font-bold text-green-600 bg-green-50 px-2 py-1 rounded-lg h-fit whitespace-nowrap">إثرائي</span>
-                          <p className="text-sm text-[var(--lux-black)] leading-relaxed whitespace-pre-line">{subject.enrichment}</p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
       </div>
-
     </main>
   );
 }

@@ -4,8 +4,8 @@ import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 
 export const metadata: Metadata = {
-  title: "معهد الإمام تقي الدين الحصني",
-  description: "الموقع الرسمي لمعهد الإمام تقي الدين الحصني للتفقه الشافعي",
+  title: "E.L.A Academy | Beyond Language – Toward Excellence",
+  description: "أكاديمية E.L.A لتعليم اللغة الإنجليزية - تعلم الإنجليزية واتقنها مع أفضل المدرسين",
 };
 
 export default function RootLayout({
@@ -15,7 +15,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="ar" dir="rtl">
-      <body className="bg-[var(--soft-white)] text-neutral-900 antialiased">
+      <body className="bg-[var(--soft-white)] text-[var(--text-dark)] antialiased">
         <Navbar />
         {children}
         <Footer />
