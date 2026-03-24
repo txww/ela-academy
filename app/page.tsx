@@ -55,9 +55,9 @@ export default function HomePage() {
             {/* Stats */}
             <div className="flex gap-8 mt-12 justify-center md:justify-start">
               {[
-                { num: "+500", label: "طالب مسجل" },
-                { num: "+20", label: "مدرس متخصص" },
-                { num: "+50", label: "دورة تدريبية" },
+                { num: "+150", label: "طالب مسجل" },
+                { num: "+10", label: "مدرس متخصص" },
+
               ].map((s, i) => (
                 <div key={i} className="text-center">
                   <div className="text-2xl md:text-3xl font-extrabold text-white">{s.num}</div>

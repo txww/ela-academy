@@ -57,8 +57,9 @@ export default function Footer() {
           <div>
             <h4 className="font-bold text-blue-200 mb-4">تواصل معنا</h4>
             <ul className="space-y-3 text-sm text-blue-200/50">
-              <li>📧 info@elaacadmy.com</li>
+              <li>📧 ela.academy3@gmail.com</li>
               <li>🌐 elaacadmy.com</li>
+              <li>&#128222 +963 949 360 071</li>
             </ul>
           </div>
         </div>
