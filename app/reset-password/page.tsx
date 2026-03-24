@@ -1,11 +1,11 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Image from "next/image";
 
 const STRAPI_URL = process.env.NEXT_PUBLIC_STRAPI_URL || "http://localhost:1337";
 
-export default function ResetPasswordPage() {
+function ResetForm() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const code = searchParams.get("code") || "";
@@ -31,32 +31,42 @@ export default function ResetPasswordPage() {
     finally { setLoading(false); }
   };
 
+  if (success) {
+    return (
+      <div>
+        <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-4">
+          <span className="text-green-500 text-3xl">✓</span>
+        </div>
+        <p className="text-[var(--text-gray)] text-sm">تم تغيير كلمة المرور بنجاح! جاري التحويل...</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {error && <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">{error}</div>}
+      <input type="password" placeholder="كلمة المرور الجديدة" value={password} onChange={(e) => setPassword(e.target.value)}
+        className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm text-black bg-gray-50 focus:outline-none focus:border-[var(--primary-light)] transition" />
+      <input type="password" placeholder="تأكيد كلمة المرور" value={confirm} onChange={(e) => setConfirm(e.target.value)}
+        onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
+        className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm text-black bg-gray-50 focus:outline-none focus:border-[var(--primary-light)] transition" />
+      <button onClick={handleSubmit} disabled={loading}
+        className="w-full bg-[var(--primary)] text-white py-3 rounded-xl font-bold hover:bg-[var(--primary-dark)] transition disabled:opacity-60">
+        {loading ? "جاري التغيير..." : "تغيير كلمة المرور"}
+      </button>
+    </div>
+  );
+}
+
+export default function ResetPasswordPage() {
   return (
     <main className="min-h-screen bg-gradient-to-br from-[var(--primary-dark)] via-[var(--primary)] to-[var(--primary-light)] flex items-center justify-center px-4">
       <div className="bg-white rounded-2xl shadow-2xl p-10 w-full max-w-sm text-center">
         <Image src="/logo.png" alt="E.L.A" width={70} height={70} className="mx-auto mb-4 object-contain" />
         <h2 className="text-xl font-bold text-[var(--primary)] mb-4">إعادة تعيين كلمة المرور</h2>
-        {success ? (
-          <div>
-            <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-4">
-              <span className="text-green-500 text-3xl">✓</span>
-            </div>
-            <p className="text-[var(--text-gray)] text-sm">تم تغيير كلمة المرور بنجاح! جاري التحويل...</p>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {error && <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">{error}</div>}
-            <input type="password" placeholder="كلمة المرور الجديدة" value={password} onChange={(e) => setPassword(e.target.value)}
-              className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm text-black bg-gray-50 focus:outline-none focus:border-[var(--primary-light)] transition" />
-            <input type="password" placeholder="تأكيد كلمة المرور" value={confirm} onChange={(e) => setConfirm(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
-              className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm text-black bg-gray-50 focus:outline-none focus:border-[var(--primary-light)] transition" />
-            <button onClick={handleSubmit} disabled={loading}
-              className="w-full bg-[var(--primary)] text-white py-3 rounded-xl font-bold hover:bg-[var(--primary-dark)] transition disabled:opacity-60">
-              {loading ? "جاري التغيير..." : "تغيير كلمة المرور"}
-            </button>
-          </div>
-        )}
+        <Suspense fallback={<div className="py-8"><div className="w-8 h-8 border-4 border-[var(--primary)] border-t-transparent rounded-full animate-spin mx-auto" /></div>}>
+          <ResetForm />
+        </Suspense>
       </div>
     </main>
   );
