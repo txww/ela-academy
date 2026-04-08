@@ -18,7 +18,7 @@ interface User {
   id: number; email: string; firstName?: string; lastName?: string; phone?: string;
   nationality?: string; residenceCountry?: string; telegram?: string; gender?: string;
   registrationStatus?: string; academicYear?: string; isTeacher?: boolean;
-  teacherSubject?: string; birthDate?: string; is_archived?: boolean;
+  teacherSubject?: string; birthDate?: string; isArchived?: boolean;
   howDidYouKnow?: string; educationLevel?: string; availableHours?: string;
   worksFullTime?: boolean; otherInstitutes?: boolean;
 }
@@ -62,11 +62,14 @@ export default function AdminPage() {
   const [selectedStudent, setSelectedStudent] = useState<User | null>(null);
   const [editingSection, setEditingSection] = useState<Section | null>(null);
   const [calendarMonth, setCalendarMonth] = useState(new Date());
+  const [conflictWarning, setConflictWarning] = useState("");
 
   const [sectionForm, setSectionForm] = useState({ name: "", level: "intro", sub_level: "A", teacher_id: "", max_students: "7", zoom_link: "", schedule: "" });
   const [teacherForm, setTeacherForm] = useState({ firstName: "", lastName: "", email: "", password: "", teacherSubject: "" });
   const [paymentForm, setPaymentForm] = useState({ student_id: "", amount: "", currency: "USD", type: "subscription", status: "paid", notes: "", payment_date: "" });
-  const [waitlistForm, setWaitlistForm] = useState({ firstName: "", lastName: "", email: "", phone: "", interest_level: "medium", expected_date: "", notes: "" });
+  const [waitlistStudentId, setWaitlistStudentId] = useState("");
+  const [waitlistNote, setWaitlistNote] = useState("");
+  const [waitlistDate, setWaitlistDate] = useState("");
   const [eventForm, setEventForm] = useState({ title: "", date: "", end_date: "", type: "class", section_id: "", description: "", color: "#1B2A6B" });
 
   const fetchAll = useCallback(async () => {
@@ -94,8 +97,8 @@ export default function AdminPage() {
       .catch(() => router.push("/login"));
   }, [router, fetchAll]);
 
-  const students = users.filter(u => !u.isTeacher && u.email !== ADMIN_EMAIL && !u.is_archived);
-  const archivedStudents = users.filter(u => !u.isTeacher && u.email !== ADMIN_EMAIL && u.is_archived);
+  const students = users.filter(u => !u.isTeacher && u.email !== ADMIN_EMAIL && !u.isArchived);
+  const archivedStudents = users.filter(u => !u.isTeacher && u.email !== ADMIN_EMAIL && u.isArchived);
   const teachers = users.filter(u => u.isTeacher);
   const pending = students.filter(s => s.registrationStatus === "pending").length;
   const approved = students.filter(s => s.registrationStatus === "approved").length;
@@ -134,7 +137,7 @@ export default function AdminPage() {
 
   const saveEditSection = async () => {
     if (!editingSection) return;
-    await apiPut("sections", editingSection.id, editingSection);
+    await apiPut("sections", editingSection.id, editingSection as unknown as Record<string, unknown>);
     setMsg("✅ تم حفظ التعديلات"); setEditingSection(null); fetchAll();
   };
 
@@ -154,16 +157,54 @@ export default function AdminPage() {
     setMsg("✅ تم تسجيل الدفعة"); setPaymentForm({ student_id: "", amount: "", currency: "USD", type: "subscription", status: "paid", notes: "", payment_date: "" }); fetchAll();
   };
 
-  const addWaitlist = async () => {
-    if (!paymentForm.student_id) { /* skip */ }
-    await apiPost("waitlist", waitlistForm);
-    setMsg("✅ تم إضافة للقائمة"); setWaitlistForm({ firstName: "", lastName: "", email: "", phone: "", interest_level: "medium", expected_date: "", notes: "" }); fetchAll();
+  const moveToWaitlist = async () => {
+    const student = students.find(s => s.id === parseInt(waitlistStudentId));
+    if (!student) { setMsg("❌ اختر طالباً"); return; }
+    await apiPost("waitlist", {
+      firstName: student.firstName || "",
+      lastName: student.lastName || "",
+      email: student.email,
+      phone: student.phone || "",
+      interest_level: "high",
+      expected_date: waitlistDate || null,
+      notes: waitlistNote || null,
+    });
+    setMsg("✅ تم نقل الطالب لقائمة الانتظار");
+    setWaitlistStudentId(""); setWaitlistNote(""); setWaitlistDate("");
+    fetchAll();
+  };
+
+  // Check for schedule conflicts
+  const checkConflict = (date: string, sectionId: string) => {
+    if (!date || !sectionId) { setConflictWarning(""); return; }
+    const newDate = new Date(date);
+    const newHour = newDate.getHours();
+    const newDay = newDate.getDay();
+    const targetSection = sections.find(s => s.id === parseInt(sectionId));
+    if (!targetSection) return;
+
+    // Check existing events on same day/time
+    const conflicts = calendarEvents.filter(e => {
+      if (e.section_id === parseInt(sectionId)) return false;
+      const eDate = new Date(e.date);
+      return eDate.getDay() === newDay && Math.abs(eDate.getHours() - newHour) < 2;
+    });
+
+    if (conflicts.length > 0) {
+      const conflictNames = conflicts.map(e => {
+        const sec = sections.find(s => s.id === e.section_id);
+        return sec ? `${sec.name} (${new Date(e.date).toLocaleTimeString("ar", { hour: "2-digit", minute: "2-digit" })})` : e.title;
+      }).join("، ");
+      setConflictWarning(`⚠️ تحذير: يوجد تضارب مع: ${conflictNames}`);
+    } else {
+      setConflictWarning("");
+    }
   };
 
   const addEvent = async () => {
     if (!eventForm.title || !eventForm.date) { setMsg("❌ يرجى ملء العنوان والتاريخ"); return; }
     await apiPost("calendar_events", { ...eventForm, section_id: eventForm.section_id ? parseInt(eventForm.section_id) : null });
-    setMsg("✅ تم إضافة الحدث"); setEventForm({ title: "", date: "", end_date: "", type: "class", section_id: "", description: "", color: "#1B2A6B" }); fetchAll();
+    setMsg("✅ تم إضافة الحدث"); setEventForm({ title: "", date: "", end_date: "", type: "class", section_id: "", description: "", color: "#1B2A6B" }); setConflictWarning(""); fetchAll();
   };
 
   const filtered = students.filter(s => {
@@ -175,7 +216,6 @@ export default function AdminPage() {
 
   const handleLogout = () => { clearSession(); router.push("/"); };
 
-  // Calendar helpers
   const getDaysInMonth = (date: Date) => new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
   const getFirstDayOfMonth = (date: Date) => new Date(date.getFullYear(), date.getMonth(), 1).getDay();
   const getEventsForDay = (day: number) => calendarEvents.filter(e => {
@@ -230,7 +270,6 @@ export default function AdminPage() {
               </div>
               <button onClick={() => setSelectedStudent(null)} className="text-gray-400 hover:text-gray-600 text-2xl">✕</button>
             </div>
-
             <div className="grid grid-cols-2 gap-3 mb-6">
               {[
                 { label: "الهاتف", value: selectedStudent.phone },
@@ -250,18 +289,14 @@ export default function AdminPage() {
                 </div>
               ))}
             </div>
-
-            {/* Student sections */}
             <div className="mb-4">
               <p className="font-bold text-sm text-[var(--primary)] mb-2">📚 الشعب المسجل فيها:</p>
               {sectionStudents.filter(ss => ss.student_id === selectedStudent.id).map(ss => {
                 const sec = sections.find(s => s.id === ss.section_id);
-                return sec ? <span key={ss.id} className="inline-block px-3 py-1 bg-blue-50 text-blue-700 text-xs rounded-full mr-2 mb-2">{sec.name} ({LEVELS.find(l => l.value === sec.level)?.label} {sec.sub_level})</span> : null;
+                return sec ? <span key={ss.id} className="inline-block px-3 py-1 bg-blue-50 text-blue-700 text-xs rounded-full mr-2 mb-2">{sec.name} ({LEVELS.find(l => l.value === sec.level)?.label} {sec.sub_level})<button onClick={() => apiDelete("section_students", ss.id).then(fetchAll)} className="mr-1 text-red-400 hover:text-red-600">✕</button></span> : null;
               })}
               {sectionStudents.filter(ss => ss.student_id === selectedStudent.id).length === 0 && <p className="text-xs text-[var(--text-gray)]">غير مسجل في أي شعبة</p>}
             </div>
-
-            {/* Student payments */}
             <div className="mb-4">
               <p className="font-bold text-sm text-[var(--primary)] mb-2">💰 الدفعات:</p>
               {payments.filter(p => p.student_id === selectedStudent.id).map(p => (
@@ -272,14 +307,12 @@ export default function AdminPage() {
               ))}
               {payments.filter(p => p.student_id === selectedStudent.id).length === 0 && <p className="text-xs text-[var(--text-gray)]">لا توجد دفعات</p>}
             </div>
-
-            {/* Actions */}
             <div className="flex flex-wrap gap-2 pt-4 border-t border-gray-100">
               {selectedStudent.registrationStatus === "pending" && (
                 <><button onClick={() => { updateUser(selectedStudent.id, { registrationStatus: "approved" }); setSelectedStudent(null); }} className={btnSuccess}>✓ قبول</button>
                 <button onClick={() => { updateUser(selectedStudent.id, { registrationStatus: "rejected" }); setSelectedStudent(null); }} className={btnDanger}>✗ رفض</button></>
               )}
-              <button onClick={() => { updateUser(selectedStudent.id, { is_archived: true }); setSelectedStudent(null); setMsg("✅ تم أرشفة الطالب"); }} className="px-3 py-1 bg-gray-500 text-white text-xs rounded-lg font-bold hover:bg-gray-600">🗂️ أرشفة</button>
+              <button onClick={() => { updateUser(selectedStudent.id, { isArchived: true }); setSelectedStudent(null); setMsg("✅ تم أرشفة الطالب"); }} className="px-3 py-1 bg-gray-500 text-white text-xs rounded-lg font-bold hover:bg-gray-600">🗂️ أرشفة</button>
               <select onChange={e => { if (e.target.value) { enrollStudent(parseInt(e.target.value), selectedStudent.id); setSelectedStudent(null); } e.target.value = ""; }} className="px-2 py-1 border border-gray-200 rounded text-xs bg-white">
                 <option value="">تسجيل في شعبة...</option>
                 {sections.filter(sec => sec.is_active).map(sec => <option key={sec.id} value={sec.id}>{sec.name} [{sectionStudents.filter(ss => ss.section_id === sec.id).length}/{sec.max_students}]</option>)}
@@ -294,27 +327,23 @@ export default function AdminPage() {
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={() => setEditingSection(null)}>
           <div className="bg-white rounded-2xl p-6 max-w-lg w-full" onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-center mb-4">
-              <h3 className="font-bold text-lg text-[var(--primary)]">تعديل الشعبة</h3>
+              <h3 className="font-bold text-lg text-[var(--primary)]">✏️ تعديل الشعبة</h3>
               <button onClick={() => setEditingSection(null)} className="text-gray-400 text-xl">✕</button>
             </div>
             <div className="space-y-3">
               <input value={editingSection.name} onChange={e => setEditingSection({...editingSection, name: e.target.value})} placeholder="اسم الشعبة" className={inputCls} />
-              <select value={editingSection.level} onChange={e => setEditingSection({...editingSection, level: e.target.value})} className={selectCls}>
-                {LEVELS.map(l => <option key={l.value} value={l.value}>{l.label}</option>)}
-              </select>
-              <select value={editingSection.sub_level} onChange={e => setEditingSection({...editingSection, sub_level: e.target.value})} className={selectCls}>
-                {SUB_LEVELS.map(s => <option key={s} value={s}>{s}</option>)}
-              </select>
+              <select value={editingSection.level} onChange={e => setEditingSection({...editingSection, level: e.target.value})} className={selectCls}>{LEVELS.map(l => <option key={l.value} value={l.value}>{l.label}</option>)}</select>
+              <select value={editingSection.sub_level} onChange={e => setEditingSection({...editingSection, sub_level: e.target.value})} className={selectCls}>{SUB_LEVELS.map(s => <option key={s} value={s}>{s}</option>)}</select>
               <select value={editingSection.teacher_id || ""} onChange={e => setEditingSection({...editingSection, teacher_id: e.target.value ? parseInt(e.target.value) : null})} className={selectCls}>
                 <option value="">بدون مدرس</option>
                 {teachers.map(t => <option key={t.id} value={t.id}>{t.firstName} {t.lastName}</option>)}
               </select>
               <input type="number" value={editingSection.max_students} onChange={e => setEditingSection({...editingSection, max_students: parseInt(e.target.value)})} placeholder="الحد الأقصى" className={inputCls} />
               <input value={editingSection.zoom_link || ""} onChange={e => setEditingSection({...editingSection, zoom_link: e.target.value})} placeholder="رابط Zoom" className={inputCls} />
-              <input value={editingSection.schedule || ""} onChange={e => setEditingSection({...editingSection, schedule: e.target.value})} placeholder="الجدول" className={inputCls} />
+              <input value={editingSection.schedule || ""} onChange={e => setEditingSection({...editingSection, schedule: e.target.value})} placeholder="الجدول (مثال: الأحد والثلاثاء 7-8م)" className={inputCls} />
             </div>
             <div className="flex gap-3 mt-4">
-              <button onClick={saveEditSection} className={btnPrimary}>💾 حفظ التعديلات</button>
+              <button onClick={saveEditSection} className={btnPrimary}>💾 حفظ</button>
               <button onClick={() => setEditingSection(null)} className="px-5 py-2.5 border border-gray-200 rounded-xl text-sm">إلغاء</button>
             </div>
           </div>
@@ -386,8 +415,8 @@ export default function AdminPage() {
                     <div className="w-8 h-8 rounded-full bg-[var(--primary)]/10 flex items-center justify-center text-xs font-bold text-[var(--primary)]">{(s.firstName || s.email)[0]?.toUpperCase()}</div>
                     <div><p className="text-sm font-medium">{s.firstName} {s.lastName}</p><p className="text-xs text-[var(--text-gray)]">{s.email}</p></div>
                   </div>
-                  <div className="flex gap-2">
-                    {s.registrationStatus === "pending" && <><button onClick={e => { e.stopPropagation(); updateUser(s.id, { registrationStatus: "approved" }); }} className={btnSuccess}>✓ قبول</button><button onClick={e => { e.stopPropagation(); updateUser(s.id, { registrationStatus: "rejected" }); }} className={btnDanger}>✗ رفض</button></>}
+                  <div className="flex gap-2" onClick={e => e.stopPropagation()}>
+                    {s.registrationStatus === "pending" && <><button onClick={() => updateUser(s.id, { registrationStatus: "approved" })} className={btnSuccess}>✓ قبول</button><button onClick={() => updateUser(s.id, { registrationStatus: "rejected" })} className={btnDanger}>✗ رفض</button></>}
                   </div>
                 </div>
               ))}
@@ -400,7 +429,7 @@ export default function AdminPage() {
           <div className="space-y-4">
             <h2 className="text-xl font-bold text-[var(--primary)]">🎓 الطلاب ({filtered.length})</h2>
             <div className="flex flex-wrap gap-3">
-              <input placeholder="بحث بالاسم أو الإيميل..." value={search} onChange={e => setSearch(e.target.value)} className="flex-1 min-w-[200px] px-4 py-2 border border-gray-200 rounded-lg text-sm bg-white" />
+              <input placeholder="بحث..." value={search} onChange={e => setSearch(e.target.value)} className="flex-1 min-w-[200px] px-4 py-2 border border-gray-200 rounded-lg text-sm bg-white" />
               <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white">
                 <option value="all">كل الحالات</option><option value="pending">بانتظار</option><option value="approved">مقبول</option><option value="rejected">مرفوض</option>
               </select>
@@ -429,7 +458,7 @@ export default function AdminPage() {
                     {s.registrationStatus === "pending" && <><button onClick={() => updateUser(s.id, { registrationStatus: "approved" })} className={btnSuccess}>✓ قبول</button><button onClick={() => updateUser(s.id, { registrationStatus: "rejected" })} className={btnDanger}>✗ رفض</button></>}
                     {s.registrationStatus === "approved" && <span className="px-2 py-1 bg-green-100 text-green-700 text-xs rounded-full font-bold">✅ مقبول</span>}
                     {s.registrationStatus === "rejected" && <span className="px-2 py-1 bg-red-100 text-red-700 text-xs rounded-full font-bold">❌ مرفوض</span>}
-                    <button onClick={() => { updateUser(s.id, { is_archived: true }); setMsg("✅ تم الأرشفة"); }} className="px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded-lg hover:bg-gray-200">🗂️</button>
+                    <button onClick={() => { updateUser(s.id, { isArchived: true }); setMsg("✅ تم الأرشفة"); }} title="أرشفة" className="px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded-lg hover:bg-gray-200">🗂️</button>
                   </div>
                 </div>
               </div>
@@ -449,7 +478,7 @@ export default function AdminPage() {
                     <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center font-bold text-gray-500">{(s.firstName || s.email)[0]?.toUpperCase()}</div>
                     <div><p className="font-bold text-gray-600">{s.firstName} {s.lastName}</p><p className="text-xs text-[var(--text-gray)]">{s.email} • {s.phone || "—"}</p></div>
                   </div>
-                  <button onClick={() => { updateUser(s.id, { is_archived: false }); setMsg("✅ تم استعادة الطالب"); }} className="px-3 py-1 bg-blue-500 text-white text-xs rounded-lg font-bold hover:bg-blue-600">↩️ استعادة</button>
+                  <button onClick={() => { updateUser(s.id, { isArchived: false }); setMsg("✅ تم استعادة الطالب"); }} className="px-3 py-1 bg-blue-500 text-white text-xs rounded-lg font-bold hover:bg-blue-600">↩️ استعادة</button>
                 </div>
               </div>
             ))}
@@ -459,25 +488,22 @@ export default function AdminPage() {
         {/* WAITLIST */}
         {activeTab === "waitlist" && (
           <div className="space-y-6">
-            <h2 className="text-xl font-bold text-[var(--primary)]">⏳ قائمة الانتظار</h2>
+            <h2 className="text-xl font-bold text-[var(--primary)]">⏳ قائمة الانتظار ({waitlist.length})</h2>
             <div className="bg-white rounded-xl p-6 border border-gray-100">
-              <h3 className="font-bold text-[var(--primary)] mb-4">إضافة شخص للقائمة</h3>
+              <h3 className="font-bold text-[var(--primary)] mb-4">نقل طالب مسجل لقائمة الانتظار</h3>
+              <p className="text-xs text-[var(--text-gray)] mb-4">اختر طالباً موجوداً في النظام وضعه في قائمة الانتظار حتى يحين موعد تسجيله</p>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <input placeholder="الاسم الأول" value={waitlistForm.firstName} onChange={e => setWaitlistForm({...waitlistForm, firstName: e.target.value})} className={inputCls} />
-                <input placeholder="اسم العائلة" value={waitlistForm.lastName} onChange={e => setWaitlistForm({...waitlistForm, lastName: e.target.value})} className={inputCls} />
-                <input placeholder="الإيميل" value={waitlistForm.email} onChange={e => setWaitlistForm({...waitlistForm, email: e.target.value})} className={inputCls} />
-                <input placeholder="الهاتف" value={waitlistForm.phone} onChange={e => setWaitlistForm({...waitlistForm, phone: e.target.value})} className={inputCls} />
-                <select value={waitlistForm.interest_level} onChange={e => setWaitlistForm({...waitlistForm, interest_level: e.target.value})} className={selectCls}>
-                  <option value="high">اهتمام عالي 🔥</option>
-                  <option value="medium">اهتمام متوسط</option>
-                  <option value="low">اهتمام منخفض</option>
+                <select value={waitlistStudentId} onChange={e => setWaitlistStudentId(e.target.value)} className={selectCls}>
+                  <option value="">اختر الطالب *</option>
+                  {students.map(s => <option key={s.id} value={s.id}>{s.firstName} {s.lastName} — {s.email}</option>)}
                 </select>
-                <input type="date" value={waitlistForm.expected_date} onChange={e => setWaitlistForm({...waitlistForm, expected_date: e.target.value})} className={inputCls} placeholder="تاريخ التسجيل المتوقع" />
-                <textarea placeholder="ملاحظات" value={waitlistForm.notes} onChange={e => setWaitlistForm({...waitlistForm, notes: e.target.value})} className={inputCls + " md:col-span-2"} rows={2} />
+                <input type="date" value={waitlistDate} onChange={e => setWaitlistDate(e.target.value)} placeholder="تاريخ التسجيل المتوقع" className={inputCls} />
+                <textarea placeholder="ملاحظات (اختياري)" value={waitlistNote} onChange={e => setWaitlistNote(e.target.value)} className={inputCls + " md:col-span-2"} rows={2} />
               </div>
-              <button onClick={addWaitlist} className={`mt-4 ${btnPrimary}`}>➕ إضافة للقائمة</button>
+              <button onClick={moveToWaitlist} className={`mt-4 ${btnPrimary}`}>➕ إضافة لقائمة الانتظار</button>
             </div>
-            {waitlist.map(w => (
+            {waitlist.length === 0 ? <div className="bg-white rounded-xl p-8 text-center border"><p className="text-[var(--text-gray)]">قائمة الانتظار فارغة</p></div>
+            : waitlist.map(w => (
               <div key={w.id} className="bg-white rounded-xl p-5 border border-gray-100">
                 <div className="flex justify-between items-start">
                   <div>
@@ -495,7 +521,6 @@ export default function AdminPage() {
                 </div>
               </div>
             ))}
-            {waitlist.length === 0 && <div className="bg-white rounded-xl p-8 text-center border"><p className="text-[var(--text-gray)]">قائمة الانتظار فارغة</p></div>}
           </div>
         )}
 
@@ -521,7 +546,7 @@ export default function AdminPage() {
                   <div>
                     <p className="font-bold">{t.firstName} {t.lastName}</p>
                     <p className="text-xs text-[var(--text-gray)]">{t.email} • {t.teacherSubject || "—"}</p>
-                    <p className="text-xs text-blue-500">{sections.filter(s => s.teacher_id === t.id).length} شعبة • {sectionStudents.filter(ss => sections.filter(s => s.teacher_id === t.id).some(s => s.id === ss.section_id)).length} طالب</p>
+                    <p className="text-xs text-blue-500">{sections.filter(s => s.teacher_id === t.id).length} شعبة</p>
                   </div>
                 </div>
               </div>
@@ -561,15 +586,15 @@ export default function AdminPage() {
                       {sec.schedule && <p className="text-xs text-blue-500 mt-1">🕐 {sec.schedule}</p>}
                       {sec.zoom_link && <a href={sec.zoom_link} target="_blank" rel="noreferrer" className="text-xs text-blue-500 hover:underline">🔗 Zoom</a>}
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 flex-wrap">
                       <button onClick={() => setEditingSection(sec)} className="px-3 py-1 bg-blue-100 text-blue-700 text-xs rounded-lg font-bold hover:bg-blue-200">✏️ تعديل</button>
-                      <button onClick={() => apiPut("sections", sec.id, { is_active: !sec.is_active }).then(fetchAll)} className={`px-3 py-1 text-xs rounded-lg font-bold ${sec.is_active ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>{sec.is_active ? "نشطة ✓" : "معطلة"}</button>
+                      <button onClick={() => apiPut("sections", sec.id, { is_active: !sec.is_active } as Record<string, unknown>).then(fetchAll)} className={`px-3 py-1 text-xs rounded-lg font-bold ${sec.is_active ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>{sec.is_active ? "نشطة ✓" : "معطلة"}</button>
                       <button onClick={() => { if(confirm("حذف الشعبة؟")) apiDelete("sections", sec.id).then(fetchAll); }} className={btnDanger}>🗑</button>
                     </div>
                   </div>
                   {secStudents.length > 0 && (
                     <div className="mt-3 pt-3 border-t border-gray-100">
-                      <p className="text-xs font-bold text-[var(--text-gray)] mb-2">الطلاب المسجلون ({secStudents.length}):</p>
+                      <p className="text-xs font-bold text-[var(--text-gray)] mb-2">الطلاب ({secStudents.length}):</p>
                       <div className="flex flex-wrap gap-2">
                         {secStudents.map(ss => {
                           const st = students.find(s => s.id === ss.student_id);
@@ -610,21 +635,15 @@ export default function AdminPage() {
                 </select>
                 <input type="number" step="0.01" placeholder="المبلغ *" value={paymentForm.amount} onChange={e => setPaymentForm({...paymentForm, amount: e.target.value})} className={inputCls} />
                 <select value={paymentForm.currency} onChange={e => setPaymentForm({...paymentForm, currency: e.target.value})} className={selectCls}>
-                  <option value="USD">USD دولار</option>
-                  <option value="EUR">EUR يورو</option>
-                  <option value="SAR">SAR ريال</option>
-                  <option value="AED">AED درهم</option>
+                  <option value="USD">USD دولار</option><option value="EUR">EUR يورو</option>
+                  <option value="SAR">SAR ريال</option><option value="AED">AED درهم</option>
                 </select>
                 <select value={paymentForm.type} onChange={e => setPaymentForm({...paymentForm, type: e.target.value})} className={selectCls}>
-                  <option value="subscription">اشتراك</option>
-                  <option value="trial">تجربة مجانية</option>
-                  <option value="partial">دفعة جزئية</option>
-                  <option value="other">أخرى</option>
+                  <option value="subscription">اشتراك</option><option value="trial">تجربة مجانية</option>
+                  <option value="partial">دفعة جزئية</option><option value="other">أخرى</option>
                 </select>
                 <select value={paymentForm.status} onChange={e => setPaymentForm({...paymentForm, status: e.target.value})} className={selectCls}>
-                  <option value="paid">مدفوع ✅</option>
-                  <option value="pending">معلق ⏳</option>
-                  <option value="refunded">مسترد ↩️</option>
+                  <option value="paid">مدفوع ✅</option><option value="pending">معلق ⏳</option><option value="refunded">مسترد ↩️</option>
                 </select>
                 <input type="datetime-local" value={paymentForm.payment_date} onChange={e => setPaymentForm({...paymentForm, payment_date: e.target.value})} className={inputCls} />
                 <textarea placeholder="ملاحظات" value={paymentForm.notes} onChange={e => setPaymentForm({...paymentForm, notes: e.target.value})} className={inputCls + " md:col-span-2"} rows={2} />
@@ -636,7 +655,7 @@ export default function AdminPage() {
               {payments.length === 0 ? <div className="p-8 text-center"><p className="text-[var(--text-gray)]">لا توجد دفعات بعد</p></div>
               : <div className="divide-y divide-gray-50">
                 {payments.map(p => {
-                  const student = students.find(s => s.id === p.student_id) || archivedStudents.find(s => s.id === p.student_id);
+                  const student = [...students, ...archivedStudents].find(s => s.id === p.student_id);
                   return (
                     <div key={p.id} className="flex items-center justify-between px-5 py-3">
                       <div>
@@ -662,38 +681,60 @@ export default function AdminPage() {
         {activeTab === "calendar" && (
           <div className="space-y-6">
             <h2 className="text-xl font-bold text-[var(--primary)]">📅 الكالندر والجدول</h2>
+
+            {/* Section schedules overview */}
             <div className="bg-white rounded-xl p-6 border border-gray-100">
-              <h3 className="font-bold text-[var(--primary)] mb-4">إضافة حدث جديد</h3>
+              <h3 className="font-bold text-[var(--primary)] mb-3">📚 جداول الشعب الحالية</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {sections.filter(s => s.is_active && s.schedule).map(sec => {
+                  const teacher = teachers.find(t => t.id === sec.teacher_id);
+                  return (
+                    <div key={sec.id} className="flex items-center gap-3 p-3 bg-blue-50 rounded-xl border border-blue-100">
+                      <div className="w-3 h-3 rounded-full bg-[var(--primary)] flex-shrink-0" />
+                      <div>
+                        <p className="font-bold text-sm text-[var(--primary)]">{sec.name}</p>
+                        <p className="text-xs text-[var(--text-gray)]">🕐 {sec.schedule} • {LEVELS.find(l => l.value === sec.level)?.label} {sec.sub_level}</p>
+                        {teacher && <p className="text-xs text-blue-600">👨‍🏫 {teacher.firstName} {teacher.lastName}</p>}
+                      </div>
+                    </div>
+                  );
+                })}
+                {sections.filter(s => s.is_active && s.schedule).length === 0 && <p className="text-sm text-[var(--text-gray)] col-span-2">لا توجد شعب بجداول محددة</p>}
+              </div>
+            </div>
+
+            {/* Add event */}
+            <div className="bg-white rounded-xl p-6 border border-gray-100">
+              <h3 className="font-bold text-[var(--primary)] mb-4">➕ إضافة موعد جديد</h3>
+              {conflictWarning && <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-xl text-sm text-amber-700 font-medium">{conflictWarning}</div>}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <input placeholder="عنوان الحدث *" value={eventForm.title} onChange={e => setEventForm({...eventForm, title: e.target.value})} className={inputCls} />
+                <input placeholder="عنوان الموعد *" value={eventForm.title} onChange={e => setEventForm({...eventForm, title: e.target.value})} className={inputCls} />
                 <select value={eventForm.type} onChange={e => { const et = eventTypes.find(t => t.value === e.target.value); setEventForm({...eventForm, type: e.target.value, color: et?.color || "#1B2A6B"}); }} className={selectCls}>
                   {eventTypes.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
                 </select>
-                <input type="datetime-local" value={eventForm.date} onChange={e => setEventForm({...eventForm, date: e.target.value})} className={inputCls} />
-                <input type="datetime-local" value={eventForm.end_date} onChange={e => setEventForm({...eventForm, end_date: e.target.value})} placeholder="وقت الانتهاء (اختياري)" className={inputCls} />
-                <select value={eventForm.section_id} onChange={e => setEventForm({...eventForm, section_id: e.target.value})} className={selectCls}>
+                <input type="datetime-local" value={eventForm.date} onChange={e => { setEventForm({...eventForm, date: e.target.value}); checkConflict(e.target.value, eventForm.section_id); }} className={inputCls} />
+                <input type="datetime-local" value={eventForm.end_date} onChange={e => setEventForm({...eventForm, end_date: e.target.value})} placeholder="وقت الانتهاء" className={inputCls} />
+                <select value={eventForm.section_id} onChange={e => { setEventForm({...eventForm, section_id: e.target.value}); checkConflict(eventForm.date, e.target.value); }} className={selectCls}>
                   <option value="">شعبة (اختياري)</option>
-                  {sections.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  {sections.map(s => <option key={s.id} value={s.id}>{s.name} — {s.schedule || "بدون جدول"}</option>)}
                 </select>
                 <textarea placeholder="وصف (اختياري)" value={eventForm.description} onChange={e => setEventForm({...eventForm, description: e.target.value})} className={inputCls} rows={2} />
               </div>
-              <button onClick={addEvent} className={`mt-4 ${btnPrimary}`}>➕ إضافة الحدث</button>
+              <button onClick={addEvent} className={`mt-4 ${btnPrimary}`}>➕ إضافة الموعد</button>
             </div>
 
             {/* Calendar Grid */}
             <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
               <div className="flex items-center justify-between p-4 border-b border-gray-100">
-                <button onClick={() => setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() - 1))} className="px-3 py-1 hover:bg-gray-100 rounded-lg">◀</button>
-                <h3 className="font-bold text-[var(--primary)]">
-                  {calendarMonth.toLocaleDateString("ar", { month: "long", year: "numeric" })}
-                </h3>
-                <button onClick={() => setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1))} className="px-3 py-1 hover:bg-gray-100 rounded-lg">▶</button>
+                <button onClick={() => setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() - 1))} className="px-3 py-1 hover:bg-gray-100 rounded-lg text-lg">◀</button>
+                <h3 className="font-bold text-[var(--primary)]">{calendarMonth.toLocaleDateString("ar", { month: "long", year: "numeric" })}</h3>
+                <button onClick={() => setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1))} className="px-3 py-1 hover:bg-gray-100 rounded-lg text-lg">▶</button>
               </div>
-              <div className="grid grid-cols-7 border-b border-gray-100">
+              <div className="grid grid-cols-7 border-b border-gray-100 bg-gray-50">
                 {["أحد", "اثن", "ثلا", "أرب", "خمي", "جمع", "سبت"].map(d => <div key={d} className="p-2 text-center text-xs font-bold text-[var(--text-gray)]">{d}</div>)}
               </div>
               <div className="grid grid-cols-7">
-                {Array.from({ length: getFirstDayOfMonth(calendarMonth) }).map((_, i) => <div key={`empty-${i}`} className="p-2 min-h-[80px] border-b border-r border-gray-50" />)}
+                {Array.from({ length: getFirstDayOfMonth(calendarMonth) }).map((_, i) => <div key={`e${i}`} className="p-1 min-h-[80px] border-b border-r border-gray-50" />)}
                 {Array.from({ length: getDaysInMonth(calendarMonth) }).map((_, i) => {
                   const day = i + 1;
                   const dayEvents = getEventsForDay(day);
@@ -701,38 +742,43 @@ export default function AdminPage() {
                   return (
                     <div key={day} className={`p-1 min-h-[80px] border-b border-r border-gray-50 ${isToday ? "bg-blue-50" : ""}`}>
                       <p className={`text-xs font-bold mb-1 w-6 h-6 flex items-center justify-center rounded-full ${isToday ? "bg-[var(--primary)] text-white" : "text-[var(--text-gray)]"}`}>{day}</p>
-                      {dayEvents.map(e => (
-                        <div key={e.id} className="text-[10px] px-1 py-0.5 rounded mb-0.5 text-white truncate cursor-pointer group relative" style={{ backgroundColor: e.color }}>
-                          {e.title}
-                          <button onClick={() => apiDelete("calendar_events", e.id).then(fetchAll)} className="absolute left-0 top-0 h-full px-1 bg-red-500 rounded opacity-0 group-hover:opacity-100 transition">✕</button>
-                        </div>
-                      ))}
+                      {dayEvents.map(e => {
+                        const sec = sections.find(s => s.id === e.section_id);
+                        return (
+                          <div key={e.id} title={`${e.title}${sec ? ` — ${sec.name}` : ""}${e.description ? `\n${e.description}` : ""}`}
+                            className="text-[10px] px-1 py-0.5 rounded mb-0.5 text-white truncate cursor-pointer group relative" style={{ backgroundColor: e.color }}>
+                            {e.title}
+                            <button onClick={() => apiDelete("calendar_events", e.id).then(fetchAll)} className="absolute left-0 top-0 h-full px-1 bg-red-500 rounded opacity-0 group-hover:opacity-100 transition text-[10px]">✕</button>
+                          </div>
+                        );
+                      })}
                     </div>
                   );
                 })}
               </div>
             </div>
 
-            {/* Events list */}
+            {/* Upcoming events list */}
             <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
-              <div className="p-4 border-b border-gray-100"><h3 className="font-bold text-[var(--primary)]">قائمة الأحداث القادمة</h3></div>
-              {calendarEvents.filter(e => new Date(e.date) >= new Date()).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()).map(e => {
-                const sec = sections.find(s => s.id === e.section_id);
-                return (
-                  <div key={e.id} className="flex items-center justify-between px-5 py-3 border-b border-gray-50 last:border-0">
-                    <div className="flex items-center gap-3">
-                      <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: e.color }} />
-                      <div>
-                        <p className="font-medium text-sm">{e.title}</p>
-                        <p className="text-xs text-[var(--text-gray)]">{new Date(e.date).toLocaleString("ar", { weekday: "short", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })} {sec ? `• ${sec.name}` : ""}</p>
-                        {e.description && <p className="text-xs text-[var(--text-gray)]">{e.description}</p>}
+              <div className="p-4 border-b border-gray-100"><h3 className="font-bold text-[var(--primary)]">المواعيد القادمة</h3></div>
+              {calendarEvents.filter(e => new Date(e.date) >= new Date()).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()).length === 0
+                ? <div className="p-8 text-center"><p className="text-[var(--text-gray)]">لا توجد مواعيد قادمة</p></div>
+                : calendarEvents.filter(e => new Date(e.date) >= new Date()).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()).map(e => {
+                  const sec = sections.find(s => s.id === e.section_id);
+                  return (
+                    <div key={e.id} className="flex items-center justify-between px-5 py-3 border-b border-gray-50 last:border-0">
+                      <div className="flex items-center gap-3">
+                        <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: e.color }} />
+                        <div>
+                          <p className="font-medium text-sm">{e.title}</p>
+                          <p className="text-xs text-[var(--text-gray)]">{new Date(e.date).toLocaleString("ar", { weekday: "short", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })} {sec ? `• ${sec.name}` : ""}</p>
+                          {e.description && <p className="text-xs text-[var(--text-gray)]">{e.description}</p>}
+                        </div>
                       </div>
+                      <button onClick={() => apiDelete("calendar_events", e.id).then(fetchAll)} className="text-red-400 hover:text-red-600 text-xs px-2">🗑</button>
                     </div>
-                    <button onClick={() => apiDelete("calendar_events", e.id).then(fetchAll)} className="text-red-400 hover:text-red-600 text-xs px-2">🗑</button>
-                  </div>
-                );
-              })}
-              {calendarEvents.filter(e => new Date(e.date) >= new Date()).length === 0 && <div className="p-8 text-center"><p className="text-[var(--text-gray)]">لا توجد أحداث قادمة</p></div>}
+                  );
+                })}
             </div>
           </div>
         )}
