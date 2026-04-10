@@ -14,6 +14,14 @@ const LEVELS = [
 ];
 const SUB_LEVELS = ["A", "B"];
 
+// Generate time options every 30 mins from 6:00 to 23:00
+const TIME_OPTIONS = Array.from({ length: 35 }, (_, i) => {
+  const h = Math.floor(i / 2) + 6;
+  const m = i % 2 === 0 ? "00" : "30";
+  const label = h < 12 ? `${h}:${m} AM` : h === 12 ? `12:${m} PM` : `${h - 12}:${m} PM`;
+  return { value: `${String(h).padStart(2, "0")}:${m}`, label };
+});
+
 interface User {
   id: number; email: string; firstName?: string; lastName?: string; phone?: string;
   nationality?: string; residenceCountry?: string; telegram?: string; gender?: string;
@@ -25,6 +33,7 @@ interface User {
 interface Section {
   id: number; name: string; level: string; sub_level: string; teacher_id: number | null;
   max_students: number; is_active: boolean; zoom_link: string | null; schedule: string | null;
+  start_time: string | null; end_time: string | null; day_group: string | null;
 }
 interface SectionStudent { id: number; section_id: number; student_id: number; }
 interface Assignment { id: number; section_id: number; teacher_id: number; title: string; description: string | null; due_date: string | null; }
@@ -43,6 +52,24 @@ const apiPut = async (table: string, id: number, data: Record<string, unknown>) 
   fetch("/api/academy", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ table, id, ...data }) }).then(r => r.json());
 const apiDelete = async (table: string, id: number) =>
   fetch(`/api/academy?table=${table}&id=${id}`, { method: "DELETE" }).then(r => r.json());
+
+// Calculate end time (start + 90 min)
+function calcEndTime(start: string): string {
+  if (!start) return "";
+  const [h, m] = start.split(":").map(Number);
+  const total = h * 60 + m + 90;
+  return `${String(Math.floor(total / 60) % 24).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
+}
+
+// Check if two sections conflict
+function hasConflict(s1: Section, s2: Section): boolean {
+  if (!s1.day_group || !s2.day_group || s1.day_group !== s2.day_group) return false;
+  if (!s1.start_time || !s2.start_time) return false;
+  const toMins = (t: string) => { const [h, m] = t.split(":").map(Number); return h * 60 + m; };
+  const s1Start = toMins(s1.start_time), s1End = toMins(s1.end_time || calcEndTime(s1.start_time));
+  const s2Start = toMins(s2.start_time), s2End = toMins(s2.end_time || calcEndTime(s2.start_time));
+  return s1Start < s2End && s2Start < s1End;
+}
 
 export default function AdminPage() {
   const router = useRouter();
@@ -63,8 +90,12 @@ export default function AdminPage() {
   const [editingSection, setEditingSection] = useState<Section | null>(null);
   const [calendarMonth, setCalendarMonth] = useState(new Date());
   const [conflictWarning, setConflictWarning] = useState("");
+  const [sectionConflictWarning, setSectionConflictWarning] = useState("");
 
-  const [sectionForm, setSectionForm] = useState({ name: "", level: "intro", sub_level: "A", teacher_id: "", max_students: "7", zoom_link: "", schedule: "" });
+  const [sectionForm, setSectionForm] = useState({
+    name: "", level: "intro", sub_level: "A", teacher_id: "", max_students: "7",
+    zoom_link: "", day_group: "SMW", start_time: "", end_time: ""
+  });
   const [teacherForm, setTeacherForm] = useState({ firstName: "", lastName: "", email: "", password: "", teacherSubject: "" });
   const [paymentForm, setPaymentForm] = useState({ student_id: "", amount: "", currency: "USD", type: "subscription", status: "paid", notes: "", payment_date: "" });
   const [waitlistStudentId, setWaitlistStudentId] = useState("");
@@ -104,6 +135,25 @@ export default function AdminPage() {
   const approved = students.filter(s => s.registrationStatus === "approved").length;
   const totalRevenue = payments.filter(p => p.status === "paid").reduce((acc, p) => acc + Number(p.amount), 0);
 
+  // Check section time conflicts
+  const checkSectionConflict = (dayGroup: string, startTime: string, excludeId?: number) => {
+    if (!dayGroup || !startTime) { setSectionConflictWarning(""); return; }
+    const endTime = calcEndTime(startTime);
+    const toMins = (t: string) => { const [h, m] = t.split(":").map(Number); return h * 60 + m; };
+    const newStart = toMins(startTime), newEnd = toMins(endTime);
+    const conflicts = sections.filter(s => {
+      if (excludeId && s.id === excludeId) return false;
+      if (s.day_group !== dayGroup || !s.start_time) return false;
+      const sStart = toMins(s.start_time), sEnd = toMins(s.end_time || calcEndTime(s.start_time));
+      return newStart < sEnd && sStart < newEnd;
+    });
+    if (conflicts.length > 0) {
+      setSectionConflictWarning(`⚠️ تضارب مع: ${conflicts.map(s => `${s.name} (${s.start_time})`).join("، ")}`);
+    } else {
+      setSectionConflictWarning("");
+    }
+  };
+
   const updateUser = async (id: number, data: Record<string, unknown>) => {
     await fetch(`${STRAPI_URL}/api/users/${id}`, {
       method: "PUT", headers: { "Content-Type": "application/json", Authorization: `Bearer ${getJwt()}` },
@@ -131,13 +181,33 @@ export default function AdminPage() {
 
   const addSection = async () => {
     if (!sectionForm.name) { setMsg("❌ يرجى ملء اسم الشعبة"); return; }
-    await apiPost("sections", { ...sectionForm, teacher_id: sectionForm.teacher_id ? parseInt(sectionForm.teacher_id) : null, max_students: parseInt(sectionForm.max_students) });
-    setMsg("✅ تم إنشاء الشعبة"); setSectionForm({ name: "", level: "intro", sub_level: "A", teacher_id: "", max_students: "7", zoom_link: "", schedule: "" }); fetchAll();
+    if (!sectionForm.start_time) { setMsg("❌ يرجى تحديد وقت البداية"); return; }
+    const endTime = sectionForm.end_time || calcEndTime(sectionForm.start_time);
+    // Build schedule string for display
+    const schedule = `${sectionForm.day_group} ${sectionForm.start_time} - ${endTime}`;
+    await apiPost("sections", {
+      name: sectionForm.name, level: sectionForm.level, sub_level: sectionForm.sub_level,
+      teacher_id: sectionForm.teacher_id ? parseInt(sectionForm.teacher_id) : null,
+      max_students: parseInt(sectionForm.max_students),
+      zoom_link: sectionForm.zoom_link || null,
+      day_group: sectionForm.day_group,
+      start_time: sectionForm.start_time,
+      end_time: endTime,
+      schedule,
+    });
+    setMsg("✅ تم إنشاء الشعبة");
+    setSectionForm({ name: "", level: "intro", sub_level: "A", teacher_id: "", max_students: "7", zoom_link: "", day_group: "SMW", start_time: "", end_time: "" });
+    setSectionConflictWarning("");
+    fetchAll();
   };
 
   const saveEditSection = async () => {
     if (!editingSection) return;
-    await apiPut("sections", editingSection.id, editingSection as unknown as Record<string, unknown>);
+    const endTime = editingSection.end_time || calcEndTime(editingSection.start_time || "");
+    const schedule = editingSection.day_group && editingSection.start_time
+      ? `${editingSection.day_group} ${editingSection.start_time} - ${endTime}`
+      : editingSection.schedule;
+    await apiPut("sections", editingSection.id, { ...editingSection, end_time: endTime, schedule } as unknown as Record<string, unknown>);
     setMsg("✅ تم حفظ التعديلات"); setEditingSection(null); fetchAll();
   };
 
@@ -160,45 +230,23 @@ export default function AdminPage() {
   const moveToWaitlist = async () => {
     const student = students.find(s => s.id === parseInt(waitlistStudentId));
     if (!student) { setMsg("❌ اختر طالباً"); return; }
-    await apiPost("waitlist", {
-      firstName: student.firstName || "",
-      lastName: student.lastName || "",
-      email: student.email,
-      phone: student.phone || "",
-      interest_level: "high",
-      expected_date: waitlistDate || null,
-      notes: waitlistNote || null,
-    });
+    await apiPost("waitlist", { firstName: student.firstName || "", lastName: student.lastName || "", email: student.email, phone: student.phone || "", interest_level: "high", expected_date: waitlistDate || null, notes: waitlistNote || null });
     setMsg("✅ تم نقل الطالب لقائمة الانتظار");
-    setWaitlistStudentId(""); setWaitlistNote(""); setWaitlistDate("");
-    fetchAll();
+    setWaitlistStudentId(""); setWaitlistNote(""); setWaitlistDate(""); fetchAll();
   };
 
-  // Check for schedule conflicts
   const checkConflict = (date: string, sectionId: string) => {
     if (!date || !sectionId) { setConflictWarning(""); return; }
     const newDate = new Date(date);
-    const newHour = newDate.getHours();
-    const newDay = newDate.getDay();
-    const targetSection = sections.find(s => s.id === parseInt(sectionId));
-    if (!targetSection) return;
-
-    // Check existing events on same day/time
+    const newHour = newDate.getHours(); const newDay = newDate.getDay();
     const conflicts = calendarEvents.filter(e => {
       if (e.section_id === parseInt(sectionId)) return false;
       const eDate = new Date(e.date);
       return eDate.getDay() === newDay && Math.abs(eDate.getHours() - newHour) < 2;
     });
-
     if (conflicts.length > 0) {
-      const conflictNames = conflicts.map(e => {
-        const sec = sections.find(s => s.id === e.section_id);
-        return sec ? `${sec.name} (${new Date(e.date).toLocaleTimeString("ar", { hour: "2-digit", minute: "2-digit" })})` : e.title;
-      }).join("، ");
-      setConflictWarning(`⚠️ تحذير: يوجد تضارب مع: ${conflictNames}`);
-    } else {
-      setConflictWarning("");
-    }
+      setConflictWarning(`⚠️ تحذير: يوجد تضارب مع: ${conflicts.map(e => { const sec = sections.find(s => s.id === e.section_id); return sec ? `${sec.name}` : e.title; }).join("، ")}`);
+    } else { setConflictWarning(""); }
   };
 
   const addEvent = async () => {
@@ -215,7 +263,6 @@ export default function AdminPage() {
   });
 
   const handleLogout = () => { clearSession(); router.push("/"); };
-
   const getDaysInMonth = (date: Date) => new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
   const getFirstDayOfMonth = (date: Date) => new Date(date.getFullYear(), date.getMonth(), 1).getDay();
   const getEventsForDay = (day: number) => calendarEvents.filter(e => {
@@ -325,7 +372,7 @@ export default function AdminPage() {
       {/* Edit Section Modal */}
       {editingSection && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={() => setEditingSection(null)}>
-          <div className="bg-white rounded-2xl p-6 max-w-lg w-full" onClick={e => e.stopPropagation()}>
+          <div className="bg-white rounded-2xl p-6 max-w-lg w-full overflow-y-auto max-h-[90vh]" onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-center mb-4">
               <h3 className="font-bold text-lg text-[var(--primary)]">✏️ تعديل الشعبة</h3>
               <button onClick={() => setEditingSection(null)} className="text-gray-400 text-xl">✕</button>
@@ -340,7 +387,28 @@ export default function AdminPage() {
               </select>
               <input type="number" value={editingSection.max_students} onChange={e => setEditingSection({...editingSection, max_students: parseInt(e.target.value)})} placeholder="الحد الأقصى" className={inputCls} />
               <input value={editingSection.zoom_link || ""} onChange={e => setEditingSection({...editingSection, zoom_link: e.target.value})} placeholder="رابط Zoom" className={inputCls} />
-              <input value={editingSection.schedule || ""} onChange={e => setEditingSection({...editingSection, schedule: e.target.value})} placeholder="الجدول (مثال: الأحد والثلاثاء 7-8م)" className={inputCls} />
+              {/* Time fields */}
+              <div className="p-4 bg-blue-50 rounded-xl border border-blue-100 space-y-3">
+                <p className="text-sm font-bold text-[var(--primary)]">🕐 توقيت الشعبة</p>
+                <select value={editingSection.day_group || "SMW"} onChange={e => { setEditingSection({...editingSection, day_group: e.target.value}); checkSectionConflict(e.target.value, editingSection.start_time || "", editingSection.id); }} className={selectCls}>
+                  <option value="SMW">SMW — السبت / الاثنين / الأربعاء</option>
+                  <option value="STT">STT — الأحد / الثلاثاء / الخميس</option>
+                </select>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs text-[var(--text-gray)] mb-1 block">وقت البداية</label>
+                    <select value={editingSection.start_time || ""} onChange={e => { const end = calcEndTime(e.target.value); setEditingSection({...editingSection, start_time: e.target.value, end_time: end}); checkSectionConflict(editingSection.day_group || "SMW", e.target.value, editingSection.id); }} className={selectCls}>
+                      <option value="">اختر...</option>
+                      {TIME_OPTIONS.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs text-[var(--text-gray)] mb-1 block">وقت النهاية (90 دقيقة)</label>
+                    <input value={editingSection.start_time ? calcEndTime(editingSection.start_time) : ""} readOnly className={inputCls + " bg-gray-100 cursor-not-allowed"} placeholder="تلقائي" />
+                  </div>
+                </div>
+                {sectionConflictWarning && <p className="text-xs text-red-600 font-bold bg-red-50 p-2 rounded-lg">{sectionConflictWarning}</p>}
+              </div>
             </div>
             <div className="flex gap-3 mt-4">
               <button onClick={saveEditSection} className={btnPrimary}>💾 حفظ</button>
@@ -490,15 +558,15 @@ export default function AdminPage() {
           <div className="space-y-6">
             <h2 className="text-xl font-bold text-[var(--primary)]">⏳ قائمة الانتظار ({waitlist.length})</h2>
             <div className="bg-white rounded-xl p-6 border border-gray-100">
-              <h3 className="font-bold text-[var(--primary)] mb-4">نقل طالب مسجل لقائمة الانتظار</h3>
-              <p className="text-xs text-[var(--text-gray)] mb-4">اختر طالباً موجوداً في النظام وضعه في قائمة الانتظار حتى يحين موعد تسجيله</p>
+              <h3 className="font-bold text-[var(--primary)] mb-2">نقل طالب مسجل لقائمة الانتظار</h3>
+              <p className="text-xs text-[var(--text-gray)] mb-4">اختر طالباً موجوداً في النظام وضعه في قائمة الانتظار</p>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <select value={waitlistStudentId} onChange={e => setWaitlistStudentId(e.target.value)} className={selectCls}>
                   <option value="">اختر الطالب *</option>
                   {students.map(s => <option key={s.id} value={s.id}>{s.firstName} {s.lastName} — {s.email}</option>)}
                 </select>
-                <input type="date" value={waitlistDate} onChange={e => setWaitlistDate(e.target.value)} placeholder="تاريخ التسجيل المتوقع" className={inputCls} />
-                <textarea placeholder="ملاحظات (اختياري)" value={waitlistNote} onChange={e => setWaitlistNote(e.target.value)} className={inputCls + " md:col-span-2"} rows={2} />
+                <input type="date" value={waitlistDate} onChange={e => setWaitlistDate(e.target.value)} className={inputCls} />
+                <textarea placeholder="ملاحظات" value={waitlistNote} onChange={e => setWaitlistNote(e.target.value)} className={inputCls + " md:col-span-2"} rows={2} />
               </div>
               <button onClick={moveToWaitlist} className={`mt-4 ${btnPrimary}`}>➕ إضافة لقائمة الانتظار</button>
             </div>
@@ -509,10 +577,10 @@ export default function AdminPage() {
                   <div>
                     <p className="font-bold">{w.firstName} {w.lastName}</p>
                     <p className="text-xs text-[var(--text-gray)]">{w.email} • {w.phone}</p>
-                    {w.expected_date && <p className="text-xs text-blue-600 mt-1">📅 يتوقع التسجيل: {new Date(w.expected_date).toLocaleDateString("ar")}</p>}
+                    {w.expected_date && <p className="text-xs text-blue-600 mt-1">📅 {new Date(w.expected_date).toLocaleDateString("ar")}</p>}
                     {w.notes && <p className="text-xs text-[var(--text-gray)] mt-1">💬 {w.notes}</p>}
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex gap-2 items-center">
                     <span className={`px-2 py-1 rounded-full text-xs font-bold ${w.interest_level === "high" ? "bg-red-100 text-red-600" : w.interest_level === "medium" ? "bg-amber-100 text-amber-600" : "bg-gray-100 text-gray-600"}`}>
                       {w.interest_level === "high" ? "🔥 عالي" : w.interest_level === "medium" ? "🟡 متوسط" : "⬇️ منخفض"}
                     </span>
@@ -570,20 +638,56 @@ export default function AdminPage() {
                 </select>
                 <input type="number" placeholder="الحد الأقصى (7)" value={sectionForm.max_students} onChange={e => setSectionForm({...sectionForm, max_students: e.target.value})} className={inputCls} />
                 <input placeholder="رابط Zoom" value={sectionForm.zoom_link} onChange={e => setSectionForm({...sectionForm, zoom_link: e.target.value})} className={inputCls} />
-                <input placeholder="الجدول (مثال: الأحد والثلاثاء 7-8م)" value={sectionForm.schedule} onChange={e => setSectionForm({...sectionForm, schedule: e.target.value})} className={inputCls + " md:col-span-2"} />
+              </div>
+              {/* Time block */}
+              <div className="mt-4 p-4 bg-blue-50 rounded-xl border border-blue-100">
+                <p className="text-sm font-bold text-[var(--primary)] mb-3">🕐 توقيت الشعبة</p>
+                {sectionConflictWarning && <p className="text-xs text-red-600 font-bold bg-red-50 p-2 rounded-lg mb-3">{sectionConflictWarning}</p>}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <select value={sectionForm.day_group} onChange={e => { setSectionForm({...sectionForm, day_group: e.target.value}); checkSectionConflict(e.target.value, sectionForm.start_time); }} className={selectCls}>
+                    <option value="SMW">SMW — السبت / الاثنين / الأربعاء</option>
+                    <option value="STT">STT — الأحد / الثلاثاء / الخميس</option>
+                  </select>
+                  <div>
+                    <label className="text-xs text-[var(--text-gray)] mb-1 block">وقت البداية *</label>
+                    <select value={sectionForm.start_time} onChange={e => { setSectionForm({...sectionForm, start_time: e.target.value, end_time: calcEndTime(e.target.value)}); checkSectionConflict(sectionForm.day_group, e.target.value); }} className={selectCls}>
+                      <option value="">اختر الوقت...</option>
+                      {TIME_OPTIONS.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs text-[var(--text-gray)] mb-1 block">وقت النهاية (تلقائي 90 دقيقة)</label>
+                    <input value={sectionForm.start_time ? calcEndTime(sectionForm.start_time) : ""} readOnly className={inputCls + " bg-gray-100 cursor-not-allowed font-bold text-[var(--primary)]"} placeholder="سيحسب تلقائياً" />
+                  </div>
+                </div>
               </div>
               <button onClick={addSection} className={`mt-4 ${btnPrimary}`}>➕ إنشاء شعبة</button>
             </div>
+
+            {/* Sections list */}
             {sections.map(sec => {
               const secStudents = sectionStudents.filter(ss => ss.section_id === sec.id);
               const teacher = teachers.find(t => t.id === sec.teacher_id);
+              const secConflicts = sections.filter(s => s.id !== sec.id && hasConflict(sec, s));
               return (
-                <div key={sec.id} className="bg-white rounded-xl p-5 border border-gray-100">
+                <div key={sec.id} className={`bg-white rounded-xl p-5 border ${secConflicts.length > 0 ? "border-red-200 bg-red-50/30" : "border-gray-100"}`}>
                   <div className="flex items-start justify-between mb-3">
                     <div>
-                      <h3 className="font-bold text-[var(--primary)] text-lg">{sec.name}</h3>
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-bold text-[var(--primary)] text-lg">{sec.name}</h3>
+                        {secConflicts.length > 0 && <span className="px-2 py-0.5 bg-red-100 text-red-600 text-xs rounded-full font-bold">⚠️ تضارب</span>}
+                      </div>
                       <p className="text-xs text-[var(--text-gray)]">{LEVELS.find(l => l.value === sec.level)?.label} {sec.sub_level} • 👨‍🏫 {teacher ? `${teacher.firstName} ${teacher.lastName}` : "بدون مدرس"} • 👥 {secStudents.length}/{sec.max_students}</p>
-                      {sec.schedule && <p className="text-xs text-blue-500 mt-1">🕐 {sec.schedule}</p>}
+                      {/* Time display */}
+                      {sec.day_group && sec.start_time ? (
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${sec.day_group === "SMW" ? "bg-blue-100 text-blue-700" : "bg-purple-100 text-purple-700"}`}>{sec.day_group}</span>
+                          <span className="text-xs text-[var(--primary)] font-bold">🕐 {sec.start_time} — {sec.end_time || calcEndTime(sec.start_time)}</span>
+                        </div>
+                      ) : sec.schedule ? (
+                        <p className="text-xs text-blue-500 mt-1">🕐 {sec.schedule}</p>
+                      ) : null}
+                      {secConflicts.length > 0 && <p className="text-xs text-red-500 mt-1">يتضارب مع: {secConflicts.map(s => s.name).join("، ")}</p>}
                       {sec.zoom_link && <a href={sec.zoom_link} target="_blank" rel="noreferrer" className="text-xs text-blue-500 hover:underline">🔗 Zoom</a>}
                     </div>
                     <div className="flex gap-2 flex-wrap">
@@ -681,49 +785,40 @@ export default function AdminPage() {
         {activeTab === "calendar" && (
           <div className="space-y-6">
             <h2 className="text-xl font-bold text-[var(--primary)]">📅 الكالندر والجدول</h2>
-
-            {/* Section schedules overview */}
             <div className="bg-white rounded-xl p-6 border border-gray-100">
-              <h3 className="font-bold text-[var(--primary)] mb-3">📚 جداول الشعب الحالية</h3>
+              <h3 className="font-bold text-[var(--primary)] mb-3">📚 جداول الشعب</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {sections.filter(s => s.is_active && s.schedule).map(sec => {
+                {sections.filter(s => s.is_active && (s.start_time || s.schedule)).sort((a, b) => (a.start_time || "").localeCompare(b.start_time || "")).map(sec => {
                   const teacher = teachers.find(t => t.id === sec.teacher_id);
                   return (
-                    <div key={sec.id} className="flex items-center gap-3 p-3 bg-blue-50 rounded-xl border border-blue-100">
-                      <div className="w-3 h-3 rounded-full bg-[var(--primary)] flex-shrink-0" />
+                    <div key={sec.id} className={`flex items-center gap-3 p-3 rounded-xl border ${sec.day_group === "SMW" ? "bg-blue-50 border-blue-100" : sec.day_group === "STT" ? "bg-purple-50 border-purple-100" : "bg-gray-50 border-gray-100"}`}>
+                      <div className={`w-10 h-10 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0 ${sec.day_group === "SMW" ? "bg-blue-600" : sec.day_group === "STT" ? "bg-purple-600" : "bg-gray-400"}`}>{sec.day_group || "?"}</div>
                       <div>
-                        <p className="font-bold text-sm text-[var(--primary)]">{sec.name}</p>
-                        <p className="text-xs text-[var(--text-gray)]">🕐 {sec.schedule} • {LEVELS.find(l => l.value === sec.level)?.label} {sec.sub_level}</p>
-                        {teacher && <p className="text-xs text-blue-600">👨‍🏫 {teacher.firstName} {teacher.lastName}</p>}
+                        <p className="font-bold text-sm">{sec.name}</p>
+                        <p className="text-xs text-[var(--text-gray)]">{sec.start_time ? `🕐 ${sec.start_time} — ${sec.end_time || calcEndTime(sec.start_time)}` : sec.schedule}</p>
+                        {teacher && <p className="text-xs text-blue-600">👨‍🏫 {teacher.firstName}</p>}
                       </div>
                     </div>
                   );
                 })}
-                {sections.filter(s => s.is_active && s.schedule).length === 0 && <p className="text-sm text-[var(--text-gray)] col-span-2">لا توجد شعب بجداول محددة</p>}
               </div>
             </div>
-
-            {/* Add event */}
             <div className="bg-white rounded-xl p-6 border border-gray-100">
-              <h3 className="font-bold text-[var(--primary)] mb-4">➕ إضافة موعد جديد</h3>
-              {conflictWarning && <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-xl text-sm text-amber-700 font-medium">{conflictWarning}</div>}
+              <h3 className="font-bold text-[var(--primary)] mb-4">➕ إضافة موعد</h3>
+              {conflictWarning && <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-xl text-sm text-amber-700">{conflictWarning}</div>}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <input placeholder="عنوان الموعد *" value={eventForm.title} onChange={e => setEventForm({...eventForm, title: e.target.value})} className={inputCls} />
-                <select value={eventForm.type} onChange={e => { const et = eventTypes.find(t => t.value === e.target.value); setEventForm({...eventForm, type: e.target.value, color: et?.color || "#1B2A6B"}); }} className={selectCls}>
-                  {eventTypes.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-                </select>
+                <select value={eventForm.type} onChange={e => { const et = eventTypes.find(t => t.value === e.target.value); setEventForm({...eventForm, type: e.target.value, color: et?.color || "#1B2A6B"}); }} className={selectCls}>{eventTypes.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}</select>
                 <input type="datetime-local" value={eventForm.date} onChange={e => { setEventForm({...eventForm, date: e.target.value}); checkConflict(e.target.value, eventForm.section_id); }} className={inputCls} />
-                <input type="datetime-local" value={eventForm.end_date} onChange={e => setEventForm({...eventForm, end_date: e.target.value})} placeholder="وقت الانتهاء" className={inputCls} />
+                <input type="datetime-local" value={eventForm.end_date} onChange={e => setEventForm({...eventForm, end_date: e.target.value})} className={inputCls} />
                 <select value={eventForm.section_id} onChange={e => { setEventForm({...eventForm, section_id: e.target.value}); checkConflict(eventForm.date, e.target.value); }} className={selectCls}>
                   <option value="">شعبة (اختياري)</option>
-                  {sections.map(s => <option key={s.id} value={s.id}>{s.name} — {s.schedule || "بدون جدول"}</option>)}
+                  {sections.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                 </select>
-                <textarea placeholder="وصف (اختياري)" value={eventForm.description} onChange={e => setEventForm({...eventForm, description: e.target.value})} className={inputCls} rows={2} />
+                <textarea placeholder="وصف" value={eventForm.description} onChange={e => setEventForm({...eventForm, description: e.target.value})} className={inputCls} rows={2} />
               </div>
               <button onClick={addEvent} className={`mt-4 ${btnPrimary}`}>➕ إضافة الموعد</button>
             </div>
-
-            {/* Calendar Grid */}
             <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
               <div className="flex items-center justify-between p-4 border-b border-gray-100">
                 <button onClick={() => setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() - 1))} className="px-3 py-1 hover:bg-gray-100 rounded-lg text-lg">◀</button>
@@ -731,7 +826,7 @@ export default function AdminPage() {
                 <button onClick={() => setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1))} className="px-3 py-1 hover:bg-gray-100 rounded-lg text-lg">▶</button>
               </div>
               <div className="grid grid-cols-7 border-b border-gray-100 bg-gray-50">
-                {["أحد", "اثن", "ثلا", "أرب", "خمي", "جمع", "سبت"].map(d => <div key={d} className="p-2 text-center text-xs font-bold text-[var(--text-gray)]">{d}</div>)}
+                {["أحد","اثن","ثلا","أرب","خمي","جمع","سبت"].map(d => <div key={d} className="p-2 text-center text-xs font-bold text-[var(--text-gray)]">{d}</div>)}
               </div>
               <div className="grid grid-cols-7">
                 {Array.from({ length: getFirstDayOfMonth(calendarMonth) }).map((_, i) => <div key={`e${i}`} className="p-1 min-h-[80px] border-b border-r border-gray-50" />)}
@@ -742,43 +837,16 @@ export default function AdminPage() {
                   return (
                     <div key={day} className={`p-1 min-h-[80px] border-b border-r border-gray-50 ${isToday ? "bg-blue-50" : ""}`}>
                       <p className={`text-xs font-bold mb-1 w-6 h-6 flex items-center justify-center rounded-full ${isToday ? "bg-[var(--primary)] text-white" : "text-[var(--text-gray)]"}`}>{day}</p>
-                      {dayEvents.map(e => {
-                        const sec = sections.find(s => s.id === e.section_id);
-                        return (
-                          <div key={e.id} title={`${e.title}${sec ? ` — ${sec.name}` : ""}${e.description ? `\n${e.description}` : ""}`}
-                            className="text-[10px] px-1 py-0.5 rounded mb-0.5 text-white truncate cursor-pointer group relative" style={{ backgroundColor: e.color }}>
-                            {e.title}
-                            <button onClick={() => apiDelete("calendar_events", e.id).then(fetchAll)} className="absolute left-0 top-0 h-full px-1 bg-red-500 rounded opacity-0 group-hover:opacity-100 transition text-[10px]">✕</button>
-                          </div>
-                        );
-                      })}
+                      {dayEvents.map(e => (
+                        <div key={e.id} className="text-[10px] px-1 py-0.5 rounded mb-0.5 text-white truncate cursor-pointer group relative" style={{ backgroundColor: e.color }}>
+                          {e.title}
+                          <button onClick={() => apiDelete("calendar_events", e.id).then(fetchAll)} className="absolute left-0 top-0 h-full px-1 bg-red-500 rounded opacity-0 group-hover:opacity-100 transition text-[10px]">✕</button>
+                        </div>
+                      ))}
                     </div>
                   );
                 })}
               </div>
-            </div>
-
-            {/* Upcoming events list */}
-            <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
-              <div className="p-4 border-b border-gray-100"><h3 className="font-bold text-[var(--primary)]">المواعيد القادمة</h3></div>
-              {calendarEvents.filter(e => new Date(e.date) >= new Date()).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()).length === 0
-                ? <div className="p-8 text-center"><p className="text-[var(--text-gray)]">لا توجد مواعيد قادمة</p></div>
-                : calendarEvents.filter(e => new Date(e.date) >= new Date()).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()).map(e => {
-                  const sec = sections.find(s => s.id === e.section_id);
-                  return (
-                    <div key={e.id} className="flex items-center justify-between px-5 py-3 border-b border-gray-50 last:border-0">
-                      <div className="flex items-center gap-3">
-                        <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: e.color }} />
-                        <div>
-                          <p className="font-medium text-sm">{e.title}</p>
-                          <p className="text-xs text-[var(--text-gray)]">{new Date(e.date).toLocaleString("ar", { weekday: "short", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })} {sec ? `• ${sec.name}` : ""}</p>
-                          {e.description && <p className="text-xs text-[var(--text-gray)]">{e.description}</p>}
-                        </div>
-                      </div>
-                      <button onClick={() => apiDelete("calendar_events", e.id).then(fetchAll)} className="text-red-400 hover:text-red-600 text-xs px-2">🗑</button>
-                    </div>
-                  );
-                })}
             </div>
           </div>
         )}
@@ -805,5 +873,3 @@ export default function AdminPage() {
     </div>
   );
 }
-
-///ssdssddssd
