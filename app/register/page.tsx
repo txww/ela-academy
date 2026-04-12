@@ -93,6 +93,25 @@ export default function RegisterPage() {
         }),
       });
 
+      // إشعار تيليقرام — طالب جديد
+      fetch("/api/notify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "new_student",
+          data: {
+            firstName: form.firstName,
+            lastName: form.lastName,
+            email: form.email,
+            phone: form.phone,
+            residenceCountry: form.residenceCountry,
+            nationality: form.nationality,
+            telegram: form.telegram,
+            currentLevel: form.currentLevel,
+          }
+        })
+      }).catch(() => {});
+
       localStorage.setItem("jwt", jwt);
       localStorage.setItem("user", JSON.stringify(registerData.user));
       document.cookie = `jwt=${jwt}; path=/; max-age=${7 * 24 * 60 * 60}; SameSite=Lax`;
@@ -134,13 +153,10 @@ export default function RegisterPage() {
           <p className="text-[var(--text-gray)] text-sm mt-1">Beyond Language – Toward Excellence</p>
         </div>
 
-        {/* Steps indicator */}
         <div className="flex items-center justify-center gap-4 mb-8">
           {[1, 2].map((s) => (
             <div key={s} className="flex items-center gap-2">
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-all ${
-                step >= s ? "bg-[var(--primary)] text-white" : "bg-gray-100 text-gray-400"
-              }`}>
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-all ${step >= s ? "bg-[var(--primary)] text-white" : "bg-gray-100 text-gray-400"}`}>
                 {s}
               </div>
               <span className={`text-xs font-medium ${step >= s ? "text-[var(--primary)]" : "text-gray-400"}`}>
