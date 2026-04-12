@@ -7,6 +7,14 @@ const STRAPI_URL = process.env.NEXT_PUBLIC_STRAPI_URL || "http://localhost:1337"
 const ADMIN_EMAIL = "admin@ela.com";
 const getJwt = () => localStorage.getItem("jwt") || "";
 
+const notify = async (type: string, data: Record<string, unknown>) => {
+  fetch("/api/notify", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ type, data }),
+  }).catch(() => {});
+};
+
 const LEVELS = [
   { value: "intro", label: "Intro (0)" }, { value: "level1", label: "Level 1" },
   { value: "level2", label: "Level 2" }, { value: "level3", label: "Level 3" },
@@ -218,12 +226,16 @@ export default function AdminPage() {
     const section = sections.find(s => s.id === sectionId);
     if (section && count >= section.max_students) { setMsg(`❌ الشعبة ممتلئة`); return; }
     await apiPost("section_students", { section_id: sectionId, student_id: studentId });
+    const enSec = sections.find(s => s.id === sectionId);
+    notify("student_enrolled", { studentName: student.firstName + " " + student.lastName, sectionName: enSec?.name, schedule: enSec?.schedule || (enSec?.day_group + " " + enSec?.start_time) });
     setMsg("✅ تم التسجيل"); fetchAll();
   };
 
   const addPayment = async () => {
     if (!paymentForm.student_id || !paymentForm.amount) { setMsg("❌ يرجى ملء الحقول المطلوبة"); return; }
     await apiPost("payments", { ...paymentForm, payment_date: paymentForm.payment_date || new Date().toISOString() });
+    const pStudent = students.find(s => s.id === parseInt(paymentForm.student_id));
+    notify("payment", { studentName: pStudent ? pStudent.firstName + " " + pStudent.lastName : "طالب", amount: paymentForm.amount, currency: paymentForm.currency, type: paymentForm.type, status: paymentForm.status });
     setMsg("✅ تم تسجيل الدفعة"); setPaymentForm({ student_id: "", amount: "", currency: "USD", type: "subscription", status: "paid", notes: "", payment_date: "" }); fetchAll();
   };
 
@@ -484,7 +496,7 @@ export default function AdminPage() {
                     <div><p className="text-sm font-medium">{s.firstName} {s.lastName}</p><p className="text-xs text-[var(--text-gray)]">{s.email}</p></div>
                   </div>
                   <div className="flex gap-2" onClick={e => e.stopPropagation()}>
-                    {s.registrationStatus === "pending" && <><button onClick={() => updateUser(s.id, { registrationStatus: "approved" })} className={btnSuccess}>✓ قبول</button><button onClick={() => updateUser(s.id, { registrationStatus: "rejected" })} className={btnDanger}>✗ رفض</button></>}
+                    {s.registrationStatus === "pending" && <><button onClick={() => { updateUser(s.id, { registrationStatus: "approved" }); notify("student_approved", { firstName: s.firstName, lastName: s.lastName, email: s.email }); }} className={btnSuccess}>✓ قبول</button><button onClick={() => { updateUser(s.id, { registrationStatus: "rejected" }); notify("student_rejected", { firstName: s.firstName, lastName: s.lastName, email: s.email }); }} className={btnDanger}>✗ رفض</button></>}
                   </div>
                 </div>
               ))}
@@ -523,7 +535,7 @@ export default function AdminPage() {
                       <option value="">تسجيل في شعبة...</option>
                       {sections.filter(sec => sec.is_active).map(sec => <option key={sec.id} value={sec.id}>{sec.name} [{sectionStudents.filter(ss => ss.section_id === sec.id).length}/{sec.max_students}]</option>)}
                     </select>
-                    {s.registrationStatus === "pending" && <><button onClick={() => updateUser(s.id, { registrationStatus: "approved" })} className={btnSuccess}>✓ قبول</button><button onClick={() => updateUser(s.id, { registrationStatus: "rejected" })} className={btnDanger}>✗ رفض</button></>}
+                    {s.registrationStatus === "pending" && <><button onClick={() => { updateUser(s.id, { registrationStatus: "approved" }); notify("student_approved", { firstName: s.firstName, lastName: s.lastName, email: s.email }); }} className={btnSuccess}>✓ قبول</button><button onClick={() => { updateUser(s.id, { registrationStatus: "rejected" }); notify("student_rejected", { firstName: s.firstName, lastName: s.lastName, email: s.email }); }} className={btnDanger}>✗ رفض</button></>}
                     {s.registrationStatus === "approved" && <span className="px-2 py-1 bg-green-100 text-green-700 text-xs rounded-full font-bold">✅ مقبول</span>}
                     {s.registrationStatus === "rejected" && <span className="px-2 py-1 bg-red-100 text-red-700 text-xs rounded-full font-bold">❌ مرفوض</span>}
                     <button onClick={() => { updateUser(s.id, { isArchived: true }); setMsg("✅ تم الأرشفة"); }} title="أرشفة" className="px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded-lg hover:bg-gray-200">🗂️</button>
