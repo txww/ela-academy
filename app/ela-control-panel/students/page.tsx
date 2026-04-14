@@ -45,7 +45,7 @@ interface Section {
 }
 interface SectionStudent { id: number; section_id: number; student_id: number; }
 interface Assignment { id: number; section_id: number; teacher_id: number; title: string; description: string | null; due_date: string | null; }
-interface Payment { id: number; student_id: number; amount: number; currency: string; type: string; status: string; notes: string | null; payment_date: string; }
+interface Payment { id: number; student_id: number; amount: number; currency: string; type: string; status: string; notes: string | null; payment_date: string; receipt_url?: string | null; }
 interface WaitlistEntry { id: number; firstName: string; lastName: string; email: string; phone: string; interest_level: string; expected_date: string | null; notes: string | null; created_at: string; }
 interface CalendarEvent { id: number; title: string; date: string; end_date: string | null; type: string; section_id: number | null; description: string | null; color: string; }
 interface Attendance { id: number; section_id: number; student_id: number; session_date: string; status: "present" | "absent" | "late" | "excused"; marked_by: number | null; }
@@ -112,6 +112,8 @@ export default function AdminPage() {
   });
   const [teacherForm, setTeacherForm] = useState({ firstName: "", lastName: "", email: "", password: "", teacherSubject: "" });
   const [paymentForm, setPaymentForm] = useState({ student_id: "", amount: "", currency: "USD", type: "subscription", status: "paid", notes: "", payment_date: "" });
+  const [editingPayment, setEditingPayment] = useState<Payment | null>(null);
+  const [receiptFile, setReceiptFile] = useState<string | null>(null);
   const [waitlistStudentId, setWaitlistStudentId] = useState("");
   const [waitlistNote, setWaitlistNote] = useState("");
   const [waitlistDate, setWaitlistDate] = useState("");
@@ -153,6 +155,7 @@ export default function AdminPage() {
   const pending = students.filter(s => s.registrationStatus === "pending").length;
   const approved = students.filter(s => s.registrationStatus === "approved").length;
   const totalRevenue = payments.filter(p => p.status === "paid").reduce((acc, p) => acc + Number(p.amount), 0);
+  const activeStudentIds = new Set(students.map(s => s.id)); // excludes archived
 
   // Check section time conflicts
   const checkSectionConflict = (dayGroup: string, startTime: string, excludeId?: number) => {
@@ -313,6 +316,7 @@ export default function AdminPage() {
     { id: "assignments", label: "الواجبات", icon: "📝" },
     { id: "attendance", label: "الحضور والغياب", icon: "✅" },
     { id: "finance_advanced", label: "المالية المتقدمة", icon: "💳" },
+    { id: "timetable_link", label: "جدول الشعب", icon: "🗓️" },
   ];
 
   const eventTypes = [
@@ -459,7 +463,7 @@ export default function AdminPage() {
         </div>
         <nav className="p-3 space-y-0.5 overflow-y-auto">
           {tabs.map(t => (
-            <button key={t.id} onClick={() => { setActiveTab(t.id); setSidebarOpen(false); setMsg(""); }}
+            <button key={t.id} onClick={() => { if (t.id === "timetable_link") { router.push("/ela-control-panel/timetable"); return; } setActiveTab(t.id); setSidebarOpen(false); setMsg(""); }}
               className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium transition ${activeTab === t.id ? "bg-white/10 text-white" : "text-blue-200/60 hover:text-white hover:bg-white/5"}`}>
               <span className="flex items-center gap-2"><span>{t.icon}</span>{t.label}</span>
               {t.badge ? <span className="bg-amber-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">{t.badge}</span> : null}
@@ -751,10 +755,60 @@ export default function AdminPage() {
               {[
                 { label: "إجمالي الإيرادات", value: `$${totalRevenue}`, color: "text-green-600", bg: "bg-green-50" },
                 { label: "عدد الدفعات", value: payments.filter(p => p.status === "paid").length, color: "text-blue-600", bg: "bg-blue-50" },
-                { label: "تجارب مجانية", value: payments.filter(p => p.type === "trial").length, color: "text-amber-600", bg: "bg-amber-50" },
-                { label: "اشتراكات نشطة", value: payments.filter(p => p.type === "subscription" && p.status === "paid").length, color: "text-purple-600", bg: "bg-purple-50" },
+                { label: "طلاب مدفوعون", value: sectionStudentsFull.filter(s => s.payment_status === "paid").length, color: "text-purple-600", bg: "bg-purple-50" },
+                { label: "⚠️ يجب الدفع", value: sectionStudentsFull.filter(s => s.payment_status === "trial" && s.trial_sessions_used >= 3).length, color: "text-red-600", bg: "bg-red-50" },
               ].map((s, i) => <div key={i} className={`${s.bg} rounded-xl p-5 border border-gray-100`}><p className="text-xs text-[var(--text-gray)]">{s.label}</p><p className={`text-2xl font-bold mt-1 ${s.color}`}>{s.value}</p></div>)}
             </div>
+
+            {/* Edit Payment Modal */}
+            {editingPayment && (
+              <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={() => setEditingPayment(null)}>
+                <div className="bg-white rounded-2xl p-6 max-w-lg w-full" onClick={e => e.stopPropagation()}>
+                  <div className="flex justify-between items-center mb-4">
+                    <h3 className="font-bold text-lg text-[var(--primary)]">✏️ تعديل الدفعة</h3>
+                    <button onClick={() => setEditingPayment(null)} className="text-gray-400 text-xl">✕</button>
+                  </div>
+                  <div className="space-y-3">
+                    <select value={editingPayment.student_id} onChange={e => setEditingPayment({...editingPayment, student_id: parseInt(e.target.value)})} className={selectCls}>
+                      {students.map(s => <option key={s.id} value={s.id}>{s.firstName} {s.lastName}</option>)}
+                    </select>
+                    <input type="number" step="0.01" value={editingPayment.amount} onChange={e => setEditingPayment({...editingPayment, amount: parseFloat(e.target.value)})} placeholder="المبلغ" className={inputCls} />
+                    <select value={editingPayment.currency} onChange={e => setEditingPayment({...editingPayment, currency: e.target.value})} className={selectCls}>
+                      <option value="USD">USD</option><option value="EUR">EUR</option><option value="SAR">SAR</option><option value="AED">AED</option><option value="TRY">TRY</option>
+                    </select>
+                    <select value={editingPayment.type} onChange={e => setEditingPayment({...editingPayment, type: e.target.value})} className={selectCls}>
+                      <option value="subscription">اشتراك</option><option value="trial">تجربة</option><option value="partial">جزئي</option><option value="other">أخرى</option>
+                    </select>
+                    <select value={editingPayment.status} onChange={e => setEditingPayment({...editingPayment, status: e.target.value})} className={selectCls}>
+                      <option value="paid">مدفوع ✅</option><option value="pending">معلق ⏳</option><option value="refunded">مسترد ↩️</option>
+                    </select>
+                    <input type="datetime-local" value={editingPayment.payment_date?.slice(0,16)} onChange={e => setEditingPayment({...editingPayment, payment_date: e.target.value})} className={inputCls} />
+                    <textarea value={editingPayment.notes || ""} onChange={e => setEditingPayment({...editingPayment, notes: e.target.value})} placeholder="ملاحظات" className={inputCls} rows={2} />
+                    <div>
+                      <label className="text-xs text-[var(--text-gray)] mb-1 block">رفع إيصال (صورة)</label>
+                      <input type="file" accept="image/*,application/pdf" onChange={e => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onload = () => setReceiptFile(reader.result as string);
+                          reader.readAsDataURL(file);
+                        }
+                      }} className="w-full text-sm text-[var(--text-gray)] file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-[var(--primary)] file:text-white" />
+                      {(receiptFile || editingPayment.receipt_url) && <p className="text-xs text-green-600 mt-1">✅ إيصال مرفق</p>}
+                    </div>
+                  </div>
+                  <div className="flex gap-3 mt-4">
+                    <button onClick={async () => {
+                      await apiPut("payments", editingPayment.id, { ...editingPayment, receipt_url: receiptFile || editingPayment.receipt_url } as unknown as Record<string, unknown>);
+                      setMsg("✅ تم تحديث الدفعة"); setEditingPayment(null); setReceiptFile(null); fetchAll();
+                    }} className={btnPrimary}>💾 حفظ</button>
+                    <button onClick={() => { setEditingPayment(null); setReceiptFile(null); }} className="px-5 py-2.5 border border-gray-200 rounded-xl text-sm">إلغاء</button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Add Payment Form */}
             <div className="bg-white rounded-xl p-6 border border-gray-100">
               <h3 className="font-bold text-[var(--primary)] mb-4">تسجيل دفعة جديدة</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -765,38 +819,69 @@ export default function AdminPage() {
                 <input type="number" step="0.01" placeholder="المبلغ *" value={paymentForm.amount} onChange={e => setPaymentForm({...paymentForm, amount: e.target.value})} className={inputCls} />
                 <select value={paymentForm.currency} onChange={e => setPaymentForm({...paymentForm, currency: e.target.value})} className={selectCls}>
                   <option value="USD">USD دولار</option><option value="EUR">EUR يورو</option>
-                  <option value="SAR">SAR ريال</option><option value="AED">AED درهم</option>
+                  <option value="SAR">SAR ريال</option><option value="AED">AED درهم</option><option value="TRY">TRY ليرة</option>
                 </select>
                 <select value={paymentForm.type} onChange={e => setPaymentForm({...paymentForm, type: e.target.value})} className={selectCls}>
-                  <option value="subscription">اشتراك</option><option value="trial">تجربة مجانية</option>
+                  <option value="subscription">اشتراك</option><option value="trial">تجربة</option>
                   <option value="partial">دفعة جزئية</option><option value="other">أخرى</option>
                 </select>
                 <select value={paymentForm.status} onChange={e => setPaymentForm({...paymentForm, status: e.target.value})} className={selectCls}>
                   <option value="paid">مدفوع ✅</option><option value="pending">معلق ⏳</option><option value="refunded">مسترد ↩️</option>
                 </select>
                 <input type="datetime-local" value={paymentForm.payment_date} onChange={e => setPaymentForm({...paymentForm, payment_date: e.target.value})} className={inputCls} />
+                <div className="md:col-span-2">
+                  <label className="text-xs text-[var(--text-gray)] mb-1 block">رفع إيصال (اختياري)</label>
+                  <input type="file" accept="image/*,application/pdf" onChange={e => {
+                    const file = e.target.files?.[0];
+                    if (file) { const reader = new FileReader(); reader.onload = () => setReceiptFile(reader.result as string); reader.readAsDataURL(file); }
+                  }} className="w-full text-sm text-[var(--text-gray)] file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-[var(--primary)] file:text-white" />
+                  {receiptFile && <p className="text-xs text-green-600 mt-1">✅ إيصال مرفق</p>}
+                </div>
                 <textarea placeholder="ملاحظات" value={paymentForm.notes} onChange={e => setPaymentForm({...paymentForm, notes: e.target.value})} className={inputCls + " md:col-span-2"} rows={2} />
               </div>
-              <button onClick={addPayment} className={`mt-4 ${btnPrimary}`}>💾 تسجيل الدفعة</button>
+              <button onClick={async () => {
+                if (!paymentForm.student_id || !paymentForm.amount) { setMsg("❌ يرجى ملء الحقول المطلوبة"); return; }
+                const pStudent = students.find(s => s.id === parseInt(paymentForm.student_id));
+                await apiPost("payments", { ...paymentForm, receipt_url: receiptFile || null, payment_date: paymentForm.payment_date || new Date().toISOString() });
+                notify("payment", { studentName: pStudent ? pStudent.firstName + " " + pStudent.lastName : "طالب", amount: paymentForm.amount, currency: paymentForm.currency, type: paymentForm.type, status: paymentForm.status });
+                // Update payment_status to paid
+                const ss = sectionStudents.find(s => s.student_id === parseInt(paymentForm.student_id));
+                if (ss) await apiPost("section_students_update", { section_id: ss.section_id, student_id: parseInt(paymentForm.student_id), payment_status: "paid" });
+                setMsg("✅ تم تسجيل الدفعة"); setPaymentForm({ student_id: "", amount: "", currency: "USD", type: "subscription", status: "paid", notes: "", payment_date: "" }); setReceiptFile(null); fetchAll();
+              }} className={`mt-4 ${btnPrimary}`}>💾 تسجيل الدفعة</button>
             </div>
+
+            {/* Payments List */}
             <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
-              <div className="p-4 border-b border-gray-100"><h3 className="font-bold text-[var(--primary)]">سجل الدفعات</h3></div>
+              <div className="p-4 border-b border-gray-100 flex justify-between items-center">
+                <h3 className="font-bold text-[var(--primary)]">سجل الدفعات</h3>
+                <span className="text-sm text-green-600 font-bold">الإجمالي: ${totalRevenue}</span>
+              </div>
               {payments.length === 0 ? <div className="p-8 text-center"><p className="text-[var(--text-gray)]">لا توجد دفعات بعد</p></div>
               : <div className="divide-y divide-gray-50">
                 {payments.map(p => {
                   const student = [...students, ...archivedStudents].find(s => s.id === p.student_id);
                   return (
-                    <div key={p.id} className="flex items-center justify-between px-5 py-3">
-                      <div>
-                        <p className="font-medium text-sm">{student ? `${student.firstName} ${student.lastName}` : `طالب #${p.student_id}`}</p>
-                        <p className="text-xs text-[var(--text-gray)]">{p.type === "subscription" ? "اشتراك" : p.type === "trial" ? "تجربة" : p.type} • {new Date(p.payment_date).toLocaleDateString("ar")}</p>
-                        {p.notes && <p className="text-xs text-[var(--text-gray)]">💬 {p.notes}</p>}
+                    <div key={p.id} className="flex items-center justify-between px-5 py-3 hover:bg-gray-50 transition">
+                      <div className="flex items-center gap-3">
+                        {p.receipt_url && <button onClick={() => window.open(p.receipt_url!, "_blank")} className="w-8 h-8 bg-blue-50 rounded-lg flex items-center justify-center text-blue-600 hover:bg-blue-100" title="عرض الإيصال">🧾</button>}
+                        <div>
+                          <p className="font-medium text-sm">{student ? `${student.firstName} ${student.lastName}` : `طالب #${p.student_id}`}</p>
+                          <p className="text-xs text-[var(--text-gray)]">{p.type === "subscription" ? "اشتراك" : p.type === "trial" ? "تجربة" : p.type} • {new Date(p.payment_date).toLocaleDateString("ar")}</p>
+                          {p.notes && <p className="text-xs text-[var(--text-gray)]">💬 {p.notes}</p>}
+                        </div>
                       </div>
-                      <div className="text-right">
-                        <p className={`font-bold text-lg ${p.status === "paid" ? "text-green-600" : p.status === "pending" ? "text-amber-600" : "text-red-600"}`}>{p.amount} {p.currency}</p>
-                        <span className={`text-xs px-2 py-0.5 rounded-full ${p.status === "paid" ? "bg-green-100 text-green-700" : p.status === "pending" ? "bg-amber-100 text-amber-700" : "bg-red-100 text-red-700"}`}>
-                          {p.status === "paid" ? "✅ مدفوع" : p.status === "pending" ? "⏳ معلق" : "↩️ مسترد"}
-                        </span>
+                      <div className="flex items-center gap-3">
+                        <div className="text-right">
+                          <p className={`font-bold text-lg ${p.status === "paid" ? "text-green-600" : p.status === "pending" ? "text-amber-600" : "text-red-600"}`}>{p.amount} {p.currency}</p>
+                          <span className={`text-xs px-2 py-0.5 rounded-full ${p.status === "paid" ? "bg-green-100 text-green-700" : p.status === "pending" ? "bg-amber-100 text-amber-700" : "bg-red-100 text-red-700"}`}>
+                            {p.status === "paid" ? "✅ مدفوع" : p.status === "pending" ? "⏳ معلق" : "↩️ مسترد"}
+                          </span>
+                        </div>
+                        <div className="flex gap-1">
+                          <button onClick={() => { setEditingPayment(p); setReceiptFile(null); }} className="p-1.5 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 text-xs">✏️</button>
+                          <button onClick={() => { if(confirm("حذف الدفعة؟")) apiDelete("payments", p.id).then(fetchAll); }} className="p-1.5 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 text-xs">🗑</button>
+                        </div>
                       </div>
                     </div>
                   );
@@ -805,7 +890,6 @@ export default function AdminPage() {
             </div>
           </div>
         )}
-
         {/* CALENDAR */}
         {activeTab === "calendar" && (
           <div className="space-y-6">
