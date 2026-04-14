@@ -48,6 +48,8 @@ interface Assignment { id: number; section_id: number; teacher_id: number; title
 interface Payment { id: number; student_id: number; amount: number; currency: string; type: string; status: string; notes: string | null; payment_date: string; }
 interface WaitlistEntry { id: number; firstName: string; lastName: string; email: string; phone: string; interest_level: string; expected_date: string | null; notes: string | null; created_at: string; }
 interface CalendarEvent { id: number; title: string; date: string; end_date: string | null; type: string; section_id: number | null; description: string | null; color: string; }
+interface Attendance { id: number; section_id: number; student_id: number; session_date: string; status: "present" | "absent" | "late" | "excused"; marked_by: number | null; }
+interface SectionStudentFull { id: number; section_id: number; student_id: number; enrolled_at: string; trial_sessions_used: number; payment_status: string; first_session_date: string | null; subscription_start: string | null; subscription_end: string | null; }
 
 const api = async (table: string, params?: Record<string, string>) => {
   const qs = new URLSearchParams({ table, ...params }).toString();
@@ -91,6 +93,10 @@ export default function AdminPage() {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [waitlist, setWaitlist] = useState<WaitlistEntry[]>([]);
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
+  const [attendance, setAttendance] = useState<Attendance[]>([]);
+  const [sectionStudentsFull, setSectionStudentsFull] = useState<SectionStudentFull[]>([]);
+  const [attendanceSection, setAttendanceSection] = useState<number | null>(null);
+  const [attendanceDate, setAttendanceDate] = useState(new Date().toISOString().split("T")[0]);
   const [msg, setMsg] = useState("");
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
@@ -125,6 +131,11 @@ export default function AdminPage() {
     setPayments(Array.isArray(paymentsRes) ? paymentsRes : []);
     setWaitlist(Array.isArray(waitlistRes) ? waitlistRes : []);
     setCalendarEvents(Array.isArray(eventsRes) ? eventsRes : []);
+    const [attendanceRes, ssfRes] = await Promise.all([
+      api("attendance"), api("section_students_full"),
+    ]);
+    setAttendance(Array.isArray(attendanceRes) ? attendanceRes : []);
+    setSectionStudentsFull(Array.isArray(ssfRes) ? ssfRes : []);
     setLoading(false);
   }, []);
 
@@ -300,6 +311,8 @@ export default function AdminPage() {
     { id: "finance", label: "المالية", icon: "💰" },
     { id: "calendar", label: "الكالندر", icon: "📅" },
     { id: "assignments", label: "الواجبات", icon: "📝" },
+    { id: "attendance", label: "الحضور والغياب", icon: "✅" },
+    { id: "finance_advanced", label: "المالية المتقدمة", icon: "💳" },
   ];
 
   const eventTypes = [
@@ -879,6 +892,190 @@ export default function AdminPage() {
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {/* ATTENDANCE TAB */}
+        {activeTab === "attendance" && (
+          <div className="space-y-6">
+            <h2 className="text-xl font-bold text-[var(--primary)]">✅ الحضور والغياب</h2>
+            <div className="bg-white rounded-xl p-6 border border-gray-100">
+              <h3 className="font-bold text-[var(--primary)] mb-4">تسجيل حضور جلسة</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                <div>
+                  <label className="text-xs text-[var(--text-gray)] mb-1 block">الشعبة</label>
+                  <select value={attendanceSection || ""} onChange={e => setAttendanceSection(e.target.value ? parseInt(e.target.value) : null)} className={selectCls}>
+                    <option value="">اختر الشعبة</option>
+                    {sections.filter(s => s.is_active).map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs text-[var(--text-gray)] mb-1 block">التاريخ</label>
+                  <input type="date" value={attendanceDate} onChange={e => setAttendanceDate(e.target.value)} className={inputCls} />
+                </div>
+              </div>
+              {attendanceSection && (
+                <div className="space-y-3">
+                  {sectionStudents.filter(ss => ss.section_id === attendanceSection).map(ss => {
+                    const student = students.find(s => s.id === ss.student_id);
+                    if (!student) return null;
+                    const existing = attendance.find(a => a.section_id === attendanceSection && a.student_id === ss.student_id && a.session_date === attendanceDate);
+                    const ssf = sectionStudentsFull.find(s => s.section_id === attendanceSection && s.student_id === ss.student_id);
+                    const trialCount = ssf?.trial_sessions_used || 0;
+                    const payStatus = ssf?.payment_status || "trial";
+                    return (
+                      <div key={ss.id} className={`flex items-center justify-between p-4 rounded-xl border ${payStatus === "trial" && trialCount >= 3 ? "border-red-200 bg-red-50" : "border-gray-100 bg-gray-50"}`}>
+                        <div className="flex items-center gap-3">
+                          <div className="w-9 h-9 rounded-full bg-[var(--primary)]/10 flex items-center justify-center font-bold text-[var(--primary)] text-sm">{(student.firstName || student.email)[0]?.toUpperCase()}</div>
+                          <div>
+                            <p className="font-bold text-sm">{student.firstName} {student.lastName}</p>
+                            <div className="flex items-center gap-2 mt-0.5">
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${payStatus === "paid" ? "bg-green-100 text-green-700" : trialCount >= 3 ? "bg-red-100 text-red-700" : "bg-blue-100 text-blue-700"}`}>
+                                {payStatus === "paid" ? "✅ مدفوع" : trialCount >= 3 ? "⚠️ انتهت التجربة" : `🎁 تجربة ${trialCount}/3`}
+                              </span>
+                              {ssf?.first_session_date && <span className="text-[10px] text-[var(--text-gray)]">بدأ: {new Date(ssf.first_session_date).toLocaleDateString("ar")}</span>}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex gap-2 flex-wrap">
+                          {(["present","absent","late","excused"] as const).map(status => (
+                            <button key={status} onClick={async () => {
+                              await apiPost("attendance", { section_id: attendanceSection, student_id: ss.student_id, session_date: attendanceDate, status });
+                              if (status === "present" && payStatus === "trial") {
+                                const newCount = trialCount + 1;
+                                await apiPost("section_students_update", { section_id: attendanceSection, student_id: ss.student_id, trial_sessions_used: newCount, first_session_date: ssf?.first_session_date || attendanceDate });
+                                if (newCount >= 3) notify("trial_ended", { studentName: `${student.firstName} ${student.lastName}`, sectionName: sections.find(s => s.id === attendanceSection)?.name || "" });
+                              }
+                              fetchAll();
+                            }} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${existing?.status === status ? status === "present" ? "bg-green-500 text-white" : status === "absent" ? "bg-red-500 text-white" : status === "late" ? "bg-amber-500 text-white" : "bg-gray-500 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>
+                              {status === "present" ? "✓ حضر" : status === "absent" ? "✗ غاب" : status === "late" ? "⏰ تأخر" : "🔖 معذور"}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {sectionStudents.filter(ss => ss.section_id === attendanceSection).length === 0 && <p className="text-sm text-[var(--text-gray)] text-center py-4">لا يوجد طلاب في هذه الشعبة</p>}
+                </div>
+              )}
+            </div>
+            <div className="bg-white rounded-xl p-6 border border-gray-100">
+              <h3 className="font-bold text-[var(--primary)] mb-4">🎁 متابعة التجارب المجانية</h3>
+              <div className="space-y-3">
+                {sectionStudentsFull.filter(ss => ss.payment_status === "trial").map(ss => {
+                  const student = students.find(s => s.id === ss.student_id);
+                  const section = sections.find(s => s.id === ss.section_id);
+                  if (!student || !section) return null;
+                  return (
+                    <div key={ss.id} className={`flex items-center justify-between p-4 rounded-xl border ${ss.trial_sessions_used >= 3 ? "border-red-200 bg-red-50" : ss.trial_sessions_used === 2 ? "border-amber-200 bg-amber-50" : "border-blue-100 bg-blue-50"}`}>
+                      <div>
+                        <p className="font-bold text-sm">{student.firstName} {student.lastName}</p>
+                        <p className="text-xs text-[var(--text-gray)]">{section.name} • بدأ: {ss.first_session_date ? new Date(ss.first_session_date).toLocaleDateString("ar") : "—"}</p>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className="flex gap-1">
+                          {[1,2,3].map(i => <div key={i} className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${i <= ss.trial_sessions_used ? "bg-[var(--primary)] text-white" : "bg-gray-200 text-gray-400"}`}>{i}</div>)}
+                        </div>
+                        <span className={`text-xs font-bold ${ss.trial_sessions_used >= 3 ? "text-red-600" : "text-[var(--text-gray)]"}`}>
+                          {ss.trial_sessions_used >= 3 ? "⚠️ يجب الدفع!" : `${3 - ss.trial_sessions_used} متبقية`}
+                        </span>
+                        {ss.trial_sessions_used >= 3 && <button onClick={() => setActiveTab("finance")} className="px-3 py-1 bg-red-500 text-white text-xs rounded-lg font-bold">💰 دفع</button>}
+                      </div>
+                    </div>
+                  );
+                })}
+                {sectionStudentsFull.filter(ss => ss.payment_status === "trial").length === 0 && <p className="text-sm text-[var(--text-gray)] text-center py-4">لا يوجد طلاب في فترة التجربة</p>}
+              </div>
+            </div>
+            <div className="bg-white rounded-xl p-6 border border-gray-100">
+              <h3 className="font-bold text-[var(--primary)] mb-4">📊 إحصائيات الحضور</h3>
+              <div className="space-y-4">
+                {sections.filter(s => s.is_active).map(sec => {
+                  const secAtt = attendance.filter(a => a.section_id === sec.id);
+                  const present = secAtt.filter(a => a.status === "present").length;
+                  const total = secAtt.length;
+                  const rate = total > 0 ? Math.round((present / total) * 100) : 0;
+                  return (
+                    <div key={sec.id} className="p-4 bg-gray-50 rounded-xl">
+                      <div className="flex justify-between items-center mb-2">
+                        <p className="font-bold text-sm">{sec.name}</p>
+                        <span className={`font-bold text-sm ${rate >= 80 ? "text-green-600" : rate >= 60 ? "text-amber-600" : "text-red-600"}`}>{rate}%</span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-2 mb-2">
+                        <div className={`h-2 rounded-full ${rate >= 80 ? "bg-green-500" : rate >= 60 ? "bg-amber-500" : "bg-red-500"}`} style={{ width: `${rate}%` }} />
+                      </div>
+                      <div className="flex gap-4 text-xs text-[var(--text-gray)]">
+                        <span>✓ حضر: {present}</span>
+                        <span>✗ غاب: {secAtt.filter(a => a.status === "absent").length}</span>
+                        <span>⏰ تأخر: {secAtt.filter(a => a.status === "late").length}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* FINANCE ADVANCED TAB */}
+        {activeTab === "finance_advanced" && (
+          <div className="space-y-6">
+            <h2 className="text-xl font-bold text-[var(--primary)]">💳 المالية المتقدمة</h2>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {[
+                { label: "إجمالي الإيرادات", value: `$${totalRevenue}`, color: "text-green-600", bg: "bg-green-50" },
+                { label: "مدفوعون", value: sectionStudentsFull.filter(s => s.payment_status === "paid").length, color: "text-blue-600", bg: "bg-blue-50" },
+                { label: "في فترة التجربة", value: sectionStudentsFull.filter(s => s.payment_status === "trial" && s.trial_sessions_used < 3).length, color: "text-amber-600", bg: "bg-amber-50" },
+                { label: "⚠️ يجب الدفع", value: sectionStudentsFull.filter(s => s.payment_status === "trial" && s.trial_sessions_used >= 3).length, color: "text-red-600", bg: "bg-red-50" },
+              ].map((s, i) => <div key={i} className={`${s.bg} rounded-xl p-5 border border-gray-100`}><p className="text-xs text-[var(--text-gray)]">{s.label}</p><p className={`text-2xl font-bold mt-1 ${s.color}`}>{s.value}</p></div>)}
+            </div>
+            <div className="bg-white rounded-xl p-6 border border-gray-100">
+              <h3 className="font-bold text-[var(--primary)] mb-4">⚠️ طلاب انتهت تجربتهم ولم يدفعوا</h3>
+              <div className="space-y-3">
+                {sectionStudentsFull.filter(ss => ss.payment_status === "trial" && ss.trial_sessions_used >= 3).map(ss => {
+                  const student = students.find(s => s.id === ss.student_id);
+                  const section = sections.find(s => s.id === ss.section_id);
+                  if (!student || !section) return null;
+                  return (
+                    <div key={ss.id} className="flex items-center justify-between p-4 rounded-xl border border-red-200 bg-red-50">
+                      <div>
+                        <p className="font-bold text-sm">{student.firstName} {student.lastName}</p>
+                        <p className="text-xs text-[var(--text-gray)]">{section.name} • 📱 {student.phone || "—"}</p>
+                        <p className="text-xs text-red-500">بدأ التجربة: {ss.first_session_date ? new Date(ss.first_session_date).toLocaleDateString("ar") : "—"}</p>
+                      </div>
+                      <div className="flex gap-2">
+                        <button onClick={() => { setActiveTab("finance"); }} className="px-3 py-1.5 bg-green-500 text-white text-xs rounded-lg font-bold hover:bg-green-600">💰 سجل دفعة</button>
+                        <button onClick={async () => { await apiPost("section_students_update", { section_id: ss.section_id, student_id: ss.student_id, payment_status: "suspended" }); fetchAll(); }} className="px-3 py-1.5 bg-gray-500 text-white text-xs rounded-lg font-bold hover:bg-gray-600">🚫 تعليق</button>
+                      </div>
+                    </div>
+                  );
+                })}
+                {sectionStudentsFull.filter(ss => ss.payment_status === "trial" && ss.trial_sessions_used >= 3).length === 0 && <p className="text-sm text-green-600 text-center py-4">✅ جميع الطلاب دفعوا أو في فترة التجربة</p>}
+              </div>
+            </div>
+            <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+              <div className="p-4 border-b border-gray-100 flex justify-between items-center">
+                <h3 className="font-bold text-[var(--primary)]">سجل الدفعات الكامل</h3>
+                <span className="text-sm text-[var(--text-gray)]">إجمالي: ${totalRevenue}</span>
+              </div>
+              <div className="divide-y divide-gray-50">
+                {payments.map(p => {
+                  const student = [...students, ...archivedStudents].find(s => s.id === p.student_id);
+                  return (
+                    <div key={p.id} className="flex items-center justify-between px-5 py-3">
+                      <div>
+                        <p className="font-medium text-sm">{student ? `${student.firstName} ${student.lastName}` : `طالب #${p.student_id}`}</p>
+                        <p className="text-xs text-[var(--text-gray)]">{p.type === "subscription" ? "اشتراك" : p.type === "trial" ? "تجربة" : p.type} • {new Date(p.payment_date).toLocaleDateString("ar")}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className={`font-bold ${p.status === "paid" ? "text-green-600" : "text-amber-600"}`}>{p.amount} {p.currency}</p>
+                        <span className={`text-xs px-2 py-0.5 rounded-full ${p.status === "paid" ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"}`}>{p.status === "paid" ? "✅ مدفوع" : "⏳ معلق"}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           </div>
         )}
       </main>
